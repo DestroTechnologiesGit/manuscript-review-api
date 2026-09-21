@@ -1,0 +1,20 @@
+{
+  "name": "manuscript-review",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Upload a manuscript, choose which problems to fix, and get a revised version using the Anthropic API.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "openai": "^7.20.0"
+  }
+}

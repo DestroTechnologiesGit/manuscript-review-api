@@ -1,0 +1,1179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manuscript Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Paper and ink. The page is a desk; each issue is a sheet on it. */
+  --desk:#EDE8DE; --paper:#FBF9F5; --ink:#22201C; --graphite:#6B6559; --rule:#DCD5C7;
+  --rule-soft:#EBE5D9;
+  /* The editor's red pen — reserved for the manuscript's problems, nothing else. */
+  --pen:#B4342A; --pen-soft:#F7E6E2;
+  /* Your decisions, in a different ink entirely, so choices never read as errors. */
+  --mark:#2D5673; --mark-soft:#E2EAF0;
+  --amber:#8A6414;
+  --focus:#2D5673;
+  --btn-fg:#FBF9F5; --btn-hover:#3C6E92;
+  --shadow:0 1px 2px rgba(34,32,28,.05), 0 6px 16px -10px rgba(34,32,28,.18);
+  --shadow-lift:0 2px 4px rgba(34,32,28,.06), 0 14px 28px -16px rgba(34,32,28,.28);
+  --ui:"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif:"Newsreader", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --desk:#171614; --paper:#211F1C; --ink:#EDE8DE; --graphite:#9C958A; --rule:#38352F;
+    --rule-soft:#2C2A26;
+    --pen:#E8796B; --pen-soft:#3B2220;
+    --mark:#8FB6D1; --mark-soft:#1E2B34;
+    --amber:#D9A54B;
+    --focus:#8FB6D1;
+    --btn-fg:#171614; --btn-hover:#A9C9E0;
+    --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-lift:0 14px 30px -16px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --desk:#171614; --paper:#211F1C; --ink:#EDE8DE; --graphite:#9C958A; --rule:#38352F;
+  --rule-soft:#2C2A26;
+  --pen:#E8796B; --pen-soft:#3B2220;
+  --mark:#8FB6D1; --mark-soft:#1E2B34;
+  --amber:#D9A54B;
+  --focus:#8FB6D1;
+  --btn-fg:#171614; --btn-hover:#A9C9E0;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-lift:0 14px 30px -16px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--desk);color:var(--ink);font:16px/1.5 var(--ui);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+[hidden]{display:none !important}
+.wrap{max-width:1000px;margin:0 auto;padding:36px 24px 44px}
+html{scroll-padding-bottom:110px}
+body.has-bar .wrap{padding-bottom:132px}
+@media (max-width:640px){.wrap{padding:24px 16px 44px}
+  body.has-bar .wrap{padding-bottom:148px}}
+
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:14px 24px;margin-bottom:36px;padding-bottom:18px;border-bottom:1px solid var(--rule)}
+header.top h1{margin:0;font-family:var(--serif);font-size:1.5rem;line-height:1.1;font-weight:500;
+  letter-spacing:-.015em}
+/* Progress reads as a route, not as numbered badges. */
+.steps{display:flex;align-items:center;gap:0;list-style:none;margin:0;padding:0;
+  font-size:.82rem;color:var(--graphite)}
+.steps li{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.steps li + li::before{content:"";width:22px;height:1px;background:var(--rule);margin:0 12px}
+.steps li span{display:inline-flex;align-items:center;gap:7px}
+.steps li span::before{content:"";width:6px;height:6px;border-radius:50%;
+  border:1px solid var(--rule);background:transparent}
+.steps li[aria-current="step"]{color:var(--ink);font-weight:600}
+.steps li[aria-current="step"] span::before{background:var(--ink);border-color:var(--ink);
+  box-shadow:0 0 0 3px var(--mark-soft)}
+.steps li.done span::before{background:var(--graphite);border-color:var(--graphite)}
+@media (max-width:640px){
+  .steps li:not([aria-current="step"]) span{display:none}
+  .steps li + li::before{display:none}
+}
+
+.sheet{background:var(--paper);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow)}
+.lede{font-family:var(--serif);font-size:1.45rem;line-height:1.45;max-width:34ch;margin:0 0 30px;
+  font-weight:400;letter-spacing:-.01em}
+@media (max-width:640px){.lede{font-size:1.25rem;max-width:none}}
+
+/* Upload */
+.upload-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:24px;align-items:start}
+@media (max-width:820px){.upload-grid{grid-template-columns:1fr}}
+.drop{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;
+  min-height:268px;padding:36px 28px;border:1.5px dashed var(--rule);border-radius:3px;
+  background:var(--paper);cursor:pointer;text-align:center;width:100%;
+  transition:border-color .15s, background .15s}
+.drop:hover,.drop.over{border-color:var(--mark);background:var(--mark-soft)}
+.drop .sheetmark{width:26px;height:34px;margin-bottom:6px;border:1.5px solid var(--rule);
+  border-radius:2px;position:relative;background:var(--paper);flex:none}
+.drop .sheetmark::before,.drop .sheetmark::after{content:"";position:absolute;left:6px;right:6px;
+  height:1.5px;background:var(--rule)}
+.drop .sheetmark::before{top:10px} .drop .sheetmark::after{top:16px;right:12px}
+.drop:hover .sheetmark,.drop.over .sheetmark{border-color:var(--mark)}
+.drop:hover .sheetmark::before,.drop:hover .sheetmark::after,
+.drop.over .sheetmark::before,.drop.over .sheetmark::after{background:var(--mark)}
+.drop strong{font-size:1.05rem;font-weight:600}
+.drop .formats{color:var(--graphite);font-size:.86rem}
+.linkbtn{background:none;border:0;padding:0;color:var(--mark);text-decoration:underline;
+  text-underline-offset:3px;cursor:pointer;font-size:.9rem}
+.paste{width:100%;min-height:200px;margin-top:12px;padding:16px;border:1px solid var(--rule);
+  border-radius:3px;background:var(--paper);font-family:var(--serif);font-size:1.05rem;
+  line-height:1.65;resize:vertical}
+
+/* The handoff: who reads, who writes. The product's whole premise, and
+   both halves are yours to change. */
+.handoff{display:flex;align-items:stretch;gap:0;margin-top:18px;border:1px solid var(--rule);
+  border-radius:3px;background:var(--paper)}
+.handoff > div:not(.arrow){flex:1;padding:16px;min-width:0}
+.handoff .arrow{color:var(--graphite);font-size:1.1rem;padding:0 2px;flex:none;
+  display:flex;align-items:center}
+/* Both halves share a baseline so the two choices read as one handoff. */
+.handoff > div:not(.arrow){display:flex;flex-direction:column}
+.handoff label.f{gap:0;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--graphite)}
+.handoff label.f small{text-transform:none;letter-spacing:0;font-size:.82rem;
+  margin:4px 0 9px;line-height:1.35;min-height:2.3em}
+.modelnote{margin:8px 0 0;font-size:.82rem;color:var(--graphite);line-height:1.4;min-height:2.3em}
+.handoff select.inp{text-transform:none;letter-spacing:0;color:var(--ink);font-weight:500;
+  background:var(--paper)}
+.handoff.same{border-color:var(--amber)}
+@media (max-width:820px){
+  .handoff{flex-direction:column;align-items:stretch}
+  .handoff .arrow{transform:rotate(90deg);padding:2px 0}
+}
+.samewarn{margin:10px 0 0;font-size:.86rem;line-height:1.5;color:var(--ink);
+  border-left:3px solid var(--amber);padding:9px 0 9px 12px;background:var(--paper)}
+
+.fields{padding:24px;display:flex;flex-direction:column;gap:18px}
+label.f{display:flex;flex-direction:column;gap:7px;font-weight:600;font-size:.88rem}
+label.f small{font-weight:400;color:var(--graphite)}
+.inp{width:100%;padding:11px 13px;border:1px solid var(--rule);border-radius:3px;
+  background:var(--desk);font-weight:400;font-size:.95rem}
+.inp:hover{border-color:var(--graphite)}
+textarea.inp{min-height:76px;resize:vertical;line-height:1.5}
+/* Three checks that never turn off — stated, not offered as a choice. */
+fieldset.checks{border:0;border-top:1px solid var(--rule-soft);border-bottom:1px solid var(--rule-soft);
+  padding:14px 0;margin:0}
+fieldset.checks legend{font-size:.72rem;color:var(--graphite);text-transform:uppercase;
+  letter-spacing:.09em;font-weight:600;padding:0}
+fieldset.checks .row{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:4px}
+fieldset.checks label{display:flex;align-items:center;gap:7px;font-size:.92rem;font-weight:500}
+fieldset.checks input{position:absolute;opacity:0;pointer-events:none}
+fieldset.checks label::before{content:"";width:15px;height:15px;border-radius:2px;flex:none;
+  background:var(--mark);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 5' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 5' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat}
+
+.whodoes{margin:0;font-size:.84rem;color:var(--graphite);line-height:1.5}
+.whodoes b{color:var(--ink);font-weight:600}
+
+.warnbar{display:flex;gap:11px;align-items:flex-start;padding:13px 16px;
+  border:1px solid var(--rule);border-left:3px solid var(--amber);border-radius:3px;
+  background:var(--paper);font-size:.9rem;line-height:1.5;margin-bottom:22px}
+.warnbar span:first-child{color:var(--amber);font-weight:700;flex:none}
+.warnbar code{font-size:.86em;background:var(--desk);padding:1px 5px;border-radius:2px}
+
+/* Round history: a trail of passes over the same book. */
+.rounds{display:flex;flex-wrap:wrap;gap:0;align-items:center;margin-bottom:22px;font-size:.82rem;
+  color:var(--graphite)}
+.rounds .lbl{text-transform:uppercase;letter-spacing:.09em;font-weight:600;font-size:.72rem;
+  margin-right:12px}
+.rounds .pill{border:1px solid var(--rule);border-radius:2px;padding:5px 11px;background:var(--paper)}
+.rounds .pill + .pill{margin-left:-1px}
+.rounds .pill.now{border-color:var(--ink);color:var(--ink);font-weight:600;position:relative;z-index:1}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;
+  border-radius:3px;border:1px solid var(--ink);background:var(--ink);color:var(--btn-fg);
+  font-weight:600;font-size:.94rem;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.btn:hover:not(:disabled){background:var(--btn-hover);border-color:var(--btn-hover);color:var(--btn-fg)}
+.btn:disabled{background:transparent;color:var(--graphite);border-color:var(--rule);
+  border-style:dashed;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--rule)}
+.btn.ghost:hover:not(:disabled){border-color:var(--ink);background:transparent}
+.btn.small{padding:7px 13px;font-size:.86rem;font-weight:500}
+.err{color:var(--pen);font-weight:500;margin:0;font-size:.9rem}
+
+/* Working */
+.work{padding:56px 36px;text-align:left;max-width:620px;margin:0 auto}
+.work h2{margin:0 0 8px;font-family:var(--serif);font-size:1.6rem;font-weight:500;line-height:1.2;
+  letter-spacing:-.015em}
+.work p{margin:0 0 26px;color:var(--graphite);font-size:.94rem}
+.parts{display:flex;gap:3px;margin:0 0 26px}
+.parts i{flex:1;height:3px;border-radius:2px;background:var(--rule)}
+.parts i.on{background:var(--ink)}
+.parts i.now{background:var(--mark);animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){
+  .parts i.now{animation:none}
+  *{transition:none !important}
+}
+
+/* Issues */
+.issues-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:14px;
+  margin-bottom:22px}
+.issues-head h2{margin:0;font-family:var(--serif);font-weight:500;font-size:2.1rem;line-height:1.1;
+  letter-spacing:-.02em}
+.issues-head p{margin:6px 0 0;color:var(--graphite);font-size:.92rem}
+.bulk{display:flex;gap:7px;flex-wrap:wrap}
+
+/* Each issue is a numbered sheet with a margin rail, like a marked-up proof. */
+.issue{display:grid;grid-template-columns:1fr 268px;margin-bottom:16px;position:relative;
+  transition:box-shadow .15s, opacity .15s}
+@media (max-width:760px){.issue{grid-template-columns:1fr}}
+.issue .body{padding:22px 24px 24px;min-width:0}
+.issue .margin{padding:20px;border-left:1px solid var(--rule-soft);background:var(--desk);
+  display:flex;flex-direction:column;gap:12px}
+@media (max-width:760px){
+  .issue .margin{border-left:0;border-top:1px solid var(--rule-soft);padding:16px 20px 18px;
+    flex-direction:column}
+  .issue .body{padding:20px 20px 16px}
+  /* On a narrow screen the choice belongs right under the problem, not adrift. */
+  .issue .margin .toggle{max-width:340px}
+}
+
+/* Decided items step back so what is left to judge stands out. */
+.issue.fix{box-shadow:var(--shadow), inset 3px 0 0 var(--mark)}
+.issue.skip{opacity:.6}
+.issue.skip:hover,.issue.skip:focus-within{opacity:1}
+.issue.skip .body{filter:grayscale(1)}
+
+.meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:.78rem;
+  color:var(--graphite);margin-bottom:11px}
+.meta .num{font-family:var(--serif);font-size:.95rem;color:var(--ink);font-weight:600;
+  font-variant-numeric:tabular-nums}
+.meta .dot{width:3px;height:3px;border-radius:50%;background:var(--rule);flex:none}
+/* Severity as a weighted bar: three marks, filled by how bad it is. */
+.sev{display:inline-flex;align-items:center;gap:6px;font-weight:600;letter-spacing:.02em}
+.sev i{display:flex;gap:2px}
+.sev i b{width:4px;height:11px;border-radius:1px;background:var(--rule);display:block}
+.sev.high{color:var(--pen)} .sev.medium{color:var(--amber)} .sev.low{color:var(--graphite)}
+.sev.high i b{background:var(--pen)}
+.sev.medium i b:nth-child(-n+2){background:var(--amber)}
+.sev.low i b:nth-child(1){background:var(--graphite)}
+
+.issue h3{margin:0 0 14px;font-size:1.18rem;line-height:1.35;font-weight:600;letter-spacing:-.01em;
+  max-width:46ch}
+/* The book's own words, in the book's own typeface, marked in red pen. */
+.excerpt{font-family:var(--serif);font-size:1.15rem;line-height:1.6;margin:0 0 14px;
+  padding:2px 0 2px 16px;border-left:2px solid var(--pen);max-width:58ch}
+.excerpt q{quotes:"“" "”";text-decoration:underline wavy var(--pen);
+  text-decoration-thickness:1px;text-underline-offset:5px}
+.issue .problem{margin:0 0 10px;max-width:62ch;line-height:1.6;font-size:.97rem}
+.issue .suggest{margin:0;color:var(--graphite);max-width:62ch;line-height:1.55;font-size:.92rem}
+.issue .suggest b{color:var(--ink);font-weight:600}
+
+/* Fix / Leave — a quiet two-way switch, not a pair of shouting buttons. */
+.toggle{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--rule);border-radius:3px;
+  overflow:hidden;background:var(--paper)}
+.toggle button{border:0;background:transparent;padding:10px 6px;font-weight:600;font-size:.88rem;
+  cursor:pointer;color:var(--graphite);transition:background .12s,color .12s}
+.toggle button+button{border-left:1px solid var(--rule)}
+.toggle button:hover{background:var(--rule-soft);color:var(--ink)}
+.toggle button[aria-pressed="true"].yes{background:var(--mark);color:var(--btn-fg)}
+.toggle button[aria-pressed="true"].no{background:var(--graphite);color:var(--btn-fg)}
+
+/* Your direction to the writer, handwritten in the margin. */
+.margin label{font-size:.76rem;font-weight:600;display:flex;flex-direction:column;gap:6px;
+  text-transform:uppercase;letter-spacing:.07em;color:var(--graphite)}
+.margin textarea{min-height:92px;padding:11px 12px;border:1px solid var(--rule);border-radius:3px;
+  background:var(--paper);resize:vertical;font-weight:400;font-size:1rem;line-height:1.5;
+  font-family:var(--serif);text-transform:none;letter-spacing:0;color:var(--ink)}
+.margin textarea::placeholder{font-family:var(--ui);font-size:.85rem;color:var(--graphite);opacity:.75}
+.margin .hint{font-size:.82rem;color:var(--graphite);margin:0;line-height:1.45}
+
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--paper);
+  border-top:1px solid var(--rule);z-index:5;box-shadow:0 -8px 24px -18px rgba(0,0,0,.5)}
+.bar .in{max-width:1000px;margin:0 auto;padding:13px 24px;display:flex;align-items:center;
+  justify-content:space-between;gap:14px;flex-wrap:wrap}
+@media (max-width:640px){.bar .in{padding:11px 16px}}
+/* Counts as a progress rule: how much of the list you have judged. */
+.tally{display:flex;align-items:center;gap:14px;font-size:.86rem;color:var(--graphite);
+  flex-wrap:wrap}
+.tally b{color:var(--ink);font-variant-numeric:tabular-nums}
+.tally .t{display:inline-flex;align-items:center;gap:6px}
+.tally .t::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--rule);flex:none}
+.tally .t.fix::before{background:var(--mark)}
+.tally .t.skip::before{background:var(--graphite)}
+@media (max-width:520px){.tally .t.open{width:100%}}
+
+/* Result */
+.result-head h2{margin:0;font-family:var(--serif);font-weight:500;font-size:2.1rem;line-height:1.1;
+  letter-spacing:-.02em}
+.result-head p{margin:7px 0 0;color:var(--graphite);font-size:.94rem;max-width:64ch;line-height:1.55}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 28px}
+.group{margin-bottom:18px;overflow:hidden}
+.group > h3{margin:0;padding:15px 20px;font-size:1.02rem;font-weight:600;
+  border-bottom:1px solid var(--rule-soft);display:flex;justify-content:space-between;gap:12px;
+  align-items:baseline;background:var(--desk)}
+.group > h3 span{font-weight:400;font-size:.82rem;color:var(--graphite);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.group .usernote{margin:0;padding:11px 20px;font-size:.92rem;color:var(--ink);
+  border-bottom:1px solid var(--rule-soft);font-family:var(--serif);background:var(--mark-soft)}
+.change{display:grid;grid-template-columns:auto 1fr;gap:13px;padding:15px 20px;
+  border-bottom:1px solid var(--rule-soft)}
+.change:last-child{border-bottom:0}
+.change input{width:17px;height:17px;margin-top:5px;accent-color:var(--mark);flex:none}
+.change .txt{font-family:var(--serif);font-size:1.05rem;line-height:1.65;min-width:0;
+  overflow-wrap:anywhere;white-space:pre-wrap}
+.change del{color:var(--pen);text-decoration-color:var(--pen);background:var(--pen-soft);
+  padding:1px 2px;border-radius:2px}
+.change ins{color:var(--mark);text-decoration:none;background:var(--mark-soft);
+  padding:1px 2px;border-radius:2px}
+.change .anchor{color:var(--graphite)}
+.change.off .txt{opacity:.4}
+.change .status{display:block;font-family:var(--ui);font-size:.79rem;color:var(--pen);margin-top:5px}
+.change .status.undone{color:var(--graphite)}
+.none{padding:15px 20px;margin:0;color:var(--graphite);font-size:.92rem;line-height:1.55}
+details.full{margin-top:26px}
+details.full summary{cursor:pointer;font-weight:600;font-size:.92rem}
+details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
+  border:1px solid var(--rule);border-radius:3px;background:var(--paper);font-family:var(--serif);
+  font-size:1.05rem;line-height:1.7}
+
+.toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);background:var(--ink);
+  color:var(--btn-fg);padding:11px 18px;border-radius:3px;font-size:.9rem;
+  max-width:min(560px,92vw);z-index:10;box-shadow:var(--shadow-lift);line-height:1.45}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Manuscript review</h1>
+    <ol class="steps" aria-label="Progress">
+      <li data-step="upload" aria-current="step"><span>Upload</span></li>
+      <li data-step="issues"><span>Choose fixes</span></li>
+      <li data-step="result"><span>Revised text</span></li>
+    </ol>
+  </header>
+
+  <!-- Upload -->
+  <section id="screen-upload">
+    <p class="lede">Upload a manuscript and get a list of what’s wrong with it. You decide which problems get fixed, and how.</p>
+    <div class="upload-grid">
+      <div>
+        <button type="button" class="drop" id="drop">
+          <span class="sheetmark" aria-hidden="true"></span>
+          <strong id="dropTitle">Drop your manuscript here</strong>
+          <span class="formats" id="dropSub">.docx, .pdf, .txt or .md — or click to choose a file</span>
+        </button>
+        <input type="file" id="file" accept=".docx,.pdf,.txt,.md,.markdown,text/plain" hidden>
+        <p style="margin:12px 0 0"><button type="button" class="linkbtn" id="pasteToggle">Paste text instead</button></p>
+        <textarea id="paste" class="paste" placeholder="Paste the manuscript text here" hidden></textarea>
+        <div class="handoff" id="handoff">
+          <div>
+            <label class="f" for="mReviewer">Reads it
+              <small>Finds what is wrong. Never rewrites.</small>
+              <select class="inp" id="mReviewer"></select>
+            </label>
+            <p class="modelnote" id="noteReviewer"></p>
+          </div>
+          <div class="arrow" aria-hidden="true">→</div>
+          <div>
+            <label class="f" for="mWriter">Rewrites it
+              <small>Only the fixes you approve.</small>
+              <select class="inp" id="mWriter"></select>
+            </label>
+            <p class="modelnote" id="noteWriter"></p>
+          </div>
+        </div>
+        <p class="samewarn" id="sameWarn" role="status" hidden></p>
+      </div>
+      <div class="sheet fields">
+        <label class="f">Book title <small>Optional</small>
+          <input class="inp" id="title" type="text" autocomplete="off">
+        </label>
+        <label class="f">Book type
+          <select class="inp" id="type">
+            <option>Trivia and facts</option>
+            <option>Puzzle or activity book</option>
+            <option>Story collection</option>
+            <option>Bird field guide</option>
+            <option>Humor or gag gift</option>
+            <option>Other nonfiction</option>
+            <option>Fiction</option>
+          </select>
+        </label>
+        <fieldset class="f checks">
+          <legend>Every review covers</legend>
+          <div class="row">
+            <label><input type="checkbox" id="ckEdit" checked disabled> Editing</label>
+            <label><input type="checkbox" id="ckProof" checked disabled> Proofreading</label>
+            <label><input type="checkbox" id="ckFact" checked disabled> Fact-checking</label>
+          </div>
+        </fieldset>
+        <label class="f">Anything else to look for? <small>Optional</small>
+          <textarea class="inp" id="ask" placeholder="e.g. check the bird names against current taxonomy"></textarea>
+        </label>
+        <p class="err" id="uploadErr" role="alert" hidden></p>
+        <button type="button" class="btn" id="reviewBtn" disabled>Review manuscript</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Working -->
+  <section id="screen-work" hidden>
+    <div class="sheet work" aria-live="polite">
+      <h2 id="workTitle">Reviewing the manuscript</h2>
+      <p id="workSub">This usually takes a minute or two per part.</p>
+      <div class="parts" id="workParts"></div>
+      <button type="button" class="btn ghost" id="stopBtn">Stop</button>
+    </div>
+  </section>
+
+  <!-- Issues -->
+  <section id="screen-issues" hidden>
+    <div class="warnbar" id="noCrossWarn" hidden>
+      <span>⚠</span>
+      <span>No <code>OPENAI_API_KEY</code> is set, so Claude reviewed its own writing. That is the
+      blind spot this tool is built to avoid — add the key and review again for an honest second opinion.</span>
+    </div>
+    <div class="rounds" id="roundBar" hidden></div>
+    <div class="issues-head">
+      <div>
+        <h2 id="issuesTitle">Issues found</h2>
+        <p id="issuesSub"></p>
+        <p class="whodoes" id="whoIssues"></p>
+      </div>
+      <div class="bulk">
+        <button type="button" class="btn ghost small" id="fixAll">Fix all</button>
+        <button type="button" class="btn ghost small" id="skipAll">Leave all</button>
+        <button type="button" class="btn ghost small" id="newUpload">New manuscript</button>
+      </div>
+    </div>
+    <div id="issueList"></div>
+  </section>
+
+  <!-- Result -->
+  <section id="screen-result" hidden>
+    <div class="result-head">
+      <h2 id="resultTitle">Revised manuscript</h2>
+      <p id="resultSub"></p>
+      <p class="whodoes" id="whoResult"></p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" id="reReview">Send back for another review</button>
+      <button type="button" class="btn ghost" id="dlText">Download revised manuscript</button>
+      <button type="button" class="btn ghost" id="dlReport">Download change report</button>
+      <button type="button" class="btn ghost" id="backIssues">Change my choices</button>
+    </div>
+    <div id="changeList"></div>
+    <details class="full">
+      <summary>Show full revised text</summary>
+      <textarea id="fullText" readonly></textarea>
+    </details>
+  </section>
+</div>
+
+<div class="bar" id="issueBar" hidden>
+  <div class="in">
+    <div class="tally">
+      <span class="t fix"><b id="tFix">0</b> to fix</span>
+      <span class="t skip"><b id="tSkip">0</b> leaving</span>
+      <span class="t open"><b id="tOpen">0</b> still to judge</span>
+    </div>
+    <button type="button" class="btn" id="applyBtn" disabled>Apply fixes</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  function el(tag, props, ...kids){
+    const n = document.createElement(tag);
+    for (const [k,v] of Object.entries(props || {})){
+      if (v == null || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids) if (kid != null) n.append(kid);
+    return n;
+  }
+
+  /* ---------- server call: the API keys stay on the server ----------
+     role "review" goes to the reviewing model (OpenAI); role "fix" goes to
+     Claude. The browser never sees either key. */
+  async function callModel(role, prompt, signal, retried){
+    let res;
+    try{
+      res = await fetch("/api/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-app-password": sessionStorage.getItem("mr-pw") || "" },
+        body: JSON.stringify({ prompt, role, model: role === "review" ? CFG.reviewer : CFG.writer }),
+        signal
+      });
+    }catch(e){
+      if (signal && signal.aborted) throw { code: "cancelled" };
+      throw { code: "network" };
+    }
+    let body = null;
+    try { body = await res.json(); } catch { /* non-JSON reply */ }
+    if (res.status === 401 && !retried){
+      const pw = window.prompt("Enter the dashboard password");
+      if (pw == null) throw { code: "unauthorized" };
+      sessionStorage.setItem("mr-pw", pw);
+      return callModel(role, prompt, signal, true);
+    }
+    if (!res.ok || !body || !("data" in body)){
+      throw (body && body.error) || { code: "upstream_error" };
+    }
+    if (body.model) S.usedModel = body.model;
+    if (body.partial) S.partial = (S.partial || 0) + 1;
+    return body.data;
+  }
+
+  /* Which model is doing what. You choose both; the server offers only the
+     models your keys can actually reach. */
+  const CFG = { reviewer: "the reviewing model", writer: "Claude", crossModel: false,
+                models: { openai: [], anthropic: [] } };
+
+  function fillSelect(sel, groups, chosen){
+    sel.replaceChildren();
+    for (const [label, list] of groups){
+      if (!list.length) continue;
+      const g = el("optgroup", { label });
+      for (const m of list){
+        const o = el("option", { value: m.id, text: m.id, title: m.note || "" });
+        if (m.id === chosen) o.selected = true;
+        g.append(o);
+      }
+      sel.append(g);
+    }
+  }
+
+  async function loadConfig(){
+    let cfg = null;
+    try{
+      const r = await fetch("/api/config");
+      if (r.ok) cfg = await r.json();
+    }catch{ /* offline: leave the selects empty and fall back to defaults */ }
+    if (!cfg) return;
+
+    CFG.models = cfg.models;
+    const oa = cfg.models.openai || [], an = cfg.models.anthropic || [];
+    // Reviewer lists OpenAI first — a different company is the point.
+    fillSelect($("#mReviewer"), [["OpenAI", oa], ["Anthropic", an]],
+      remembered("mr-reviewer", cfg.defaults.reviewer));
+    // Rewriter lists Anthropic first, for the same reason in reverse.
+    fillSelect($("#mWriter"), [["Anthropic", an], ["OpenAI", oa]],
+      remembered("mr-writer", cfg.defaults.writer));
+    syncModels();
+  }
+
+  // Remember the last choice, but only if it is still on offer.
+  function remembered(key, fallback){
+    let saved = null;
+    try{ saved = localStorage.getItem(key); }catch{}
+    const all = [...(CFG.models.openai || []), ...(CFG.models.anthropic || [])];
+    return saved && all.some(m => m.id === saved) ? saved : fallback;
+  }
+  // Distinct from downloadFile() below — two functions called save() silently
+  // collided here once, turning a remembered choice into a file download.
+  function rememberChoice(key, value){ try{ localStorage.setItem(key, value); }catch{} }
+
+  /* Keep CFG, the warning, and the stored choices in step with the dropdowns. */
+  function syncModels(){
+    CFG.reviewer = $("#mReviewer").value || CFG.reviewer;
+    CFG.writer   = $("#mWriter").value   || CFG.writer;
+    rememberChoice("mr-reviewer", CFG.reviewer);
+    rememberChoice("mr-writer", CFG.writer);
+
+    for (const [sel, out] of [["#mReviewer","#noteReviewer"],["#mWriter","#noteWriter"]]){
+      const opt = $(sel).selectedOptions[0];
+      $(out).textContent = opt ? (opt.title || "") : "";
+    }
+
+    const same = CFG.reviewer === CFG.writer;
+    CFG.crossModel = !same;
+    $("#handoff").classList.toggle("same", same);
+    const w = $("#sameWarn");
+    w.hidden = !same;
+    if (same) w.textContent =
+      `${CFG.reviewer} would be reviewing its own rewriting. A model checking its own work ` +
+      `skips over big problems — that is what this tool exists to avoid. Pick a different model for one of the two.`;
+    $("#noCrossWarn").hidden = !same;
+  }
+  $("#mReviewer").addEventListener("change", syncModels);
+  $("#mWriter").addEventListener("change", syncModels);
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+  const S = { text:"", source:"", chunks:[], issues:[], edits:[], approved:[], revised:"", ctl:null, meta:{},
+              round:1, history:[], usedModel:"" };
+  const SEV = { high:0, medium:1, low:2 };
+  const CATS = ["Structure","Content","Accuracy","Consistency","Formatting","Copyediting","Reader experience","KDP compliance"];
+
+  /* ---------- screens ---------- */
+  const order = ["upload","issues","result"];
+  function show(name){
+    for (const s of ["upload","work","issues","result"]) $("#screen-"+s).hidden = s !== name;
+    $("#issueBar").hidden = name !== "issues";
+    // Reserve room so the fixed bar never covers the last card.
+    document.body.classList.toggle("has-bar", name === "issues");
+    const stepName = name === "work" ? (S.workStep || "upload") : name;
+    document.querySelectorAll(".steps li").forEach(li => {
+      const idx = order.indexOf(li.dataset.step), cur = order.indexOf(stepName);
+      li.toggleAttribute("aria-current", idx === cur);
+      if (idx === cur) li.setAttribute("aria-current","step");
+      li.classList.toggle("done", idx < cur);
+    });
+    window.scrollTo(0,0);
+  }
+  let toastTimer;
+  function toast(msg){
+    const t = $("#toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 6000);
+  }
+  function uploadError(msg){ const e = $("#uploadErr"); e.textContent = msg || ""; e.hidden = !msg; }
+
+  /* ---------- file loading ---------- */
+  function loadScript(urls){
+    return new Promise((resolve, reject) => {
+      let i = 0;
+      const next = () => {
+        if (i >= urls.length) return reject(new Error("script"));
+        const s = document.createElement("script");
+        s.src = urls[i++]; s.onload = resolve; s.onerror = () => { s.remove(); next(); };
+        document.head.append(s);
+      };
+      next();
+    });
+  }
+  async function readFile(file){
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".docx")){
+      if (!window.mammoth) await loadScript([
+        "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"
+      ]);
+      const r = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+      return r.value;
+    }
+    if (name.endsWith(".pdf")){
+      if (!window.pdfjsLib) await loadScript(["https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"]);
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      const doc = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+      const pages = [];
+      for (let p = 1; p <= doc.numPages; p++){
+        const c = await (await doc.getPage(p)).getTextContent();
+        pages.push(c.items.map(it => it.str + (it.hasEOL ? "\n" : "")).join(""));
+      }
+      return pages.join("\n\n");
+    }
+    return await file.text();
+  }
+  const words = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+
+  async function takeFile(file){
+    if (!file) return;
+    uploadError("");
+    $("#dropTitle").textContent = "Reading " + file.name + "…";
+    $("#dropSub").textContent = "";
+    try{
+      const text = (await readFile(file)).replace(/\r\n?/g, "\n");
+      if (!text.trim()) throw new Error("empty");
+      setManuscript(text, file.name);
+    }catch(e){
+      S.text = ""; $("#reviewBtn").disabled = true;
+      $("#dropTitle").textContent = "Drop your manuscript here";
+      $("#dropSub").textContent = ".docx, .pdf, .txt or .md, or click to choose a file";
+      uploadError(e && e.message === "empty"
+        ? "No text was found in that file. If it’s a scanned PDF, export it as .docx or .txt and upload that."
+        : "That file couldn’t be read. Save it as .docx or .txt and try again, or paste the text.");
+    }
+  }
+  function setManuscript(text, source){
+    S.text = text; S.source = source;
+    const drop = $("#drop");
+    $("#dropTitle").textContent = source;
+    $("#dropSub").textContent = words(text).toLocaleString() + " words. Click to choose a different file.";
+    drop.classList.remove("over");
+    $("#reviewBtn").disabled = false;
+  }
+
+  const drop = $("#drop"), fileInput = $("#file");
+  drop.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => { takeFile(fileInput.files[0]); fileInput.value = ""; });
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); takeFile(e.dataTransfer.files[0]); });
+  $("#pasteToggle").addEventListener("click", () => {
+    const p = $("#paste"); p.hidden = !p.hidden;
+    $("#pasteToggle").textContent = p.hidden ? "Paste text instead" : "Hide pasted text";
+    if (!p.hidden) p.focus();
+  });
+  $("#paste").addEventListener("input", e => {
+    const t = e.target.value;
+    if (t.trim()){ S.text = t; S.source = "Pasted text"; $("#reviewBtn").disabled = false; $("#dropTitle").textContent = "Using pasted text"; $("#dropSub").textContent = words(t).toLocaleString() + " words"; }
+    else if (S.source === "Pasted text"){ S.text = ""; $("#reviewBtn").disabled = true; $("#dropTitle").textContent = "Drop your manuscript here"; $("#dropSub").textContent = ".docx, .pdf, .txt or .md, or click to choose a file"; }
+  });
+
+  /* ---------- chunking (keeps text byte-exact when rejoined) ---------- */
+  /* Parts are sized so the fix step's reply fits comfortably in one call.
+     Rewrites quote the text they change, so a part that is too large forces a
+     reply the model cannot finish. */
+  function splitChunks(text, maxBytes = 35000){
+    const enc = new TextEncoder();
+    const pieces = text.split(/(\n\s*\n)/);
+    const chunks = []; let cur = "", curB = 0;
+    const push = (p) => {
+      const b = enc.encode(p).length;
+      if (curB + b > maxBytes && cur){ chunks.push(cur); cur = ""; curB = 0; }
+      cur += p; curB += b;
+    };
+    for (const p of pieces){
+      if (enc.encode(p).length > maxBytes){
+        for (let i = 0; i < p.length; i += 14000) push(p.slice(i, i + 14000));
+      } else push(p);
+    }
+    if (cur) chunks.push(cur);
+    return chunks.length ? chunks : [text];
+  }
+
+  /* ---------- working state ---------- */
+  let timer;
+  function startWork(step, title, total){
+    S.workStep = step;
+    $("#workTitle").textContent = title;
+    const parts = $("#workParts"); parts.replaceChildren();
+    for (let i = 0; i < total; i++) parts.append(el("i"));
+    parts.hidden = total < 2;
+    const t0 = Date.now();
+    clearInterval(timer);
+    const tick = () => { const s = Math.round((Date.now()-t0)/1000); $("#workSub").textContent = s < 5 ? "Claude is reading. This usually takes a minute or two per part." : s + " seconds so far."; };
+    tick(); timer = setInterval(tick, 1000);
+    show("work");
+  }
+  function setPart(i, title){
+    $("#workTitle").textContent = title;
+    [...$("#workParts").children].forEach((n, j) => { n.className = j < i ? "on" : j === i ? "now" : ""; });
+  }
+  function stopWork(){ clearInterval(timer); }
+  $("#stopBtn").addEventListener("click", () => S.ctl && S.ctl.abort());
+
+  function errCopy(e){
+    switch (e && e.code){
+      case "unauthorized": return "That password isn’t right. Reload the page to try again.";
+      case "server_key": return "The server’s API key is missing or invalid. Check ANTHROPIC_API_KEY in the .env file.";
+      case "rate_limited": return "The API rate limit was hit. Wait a minute, then try again.";
+      case "overloaded": return "Claude is busy right now. Try again in a minute.";
+      case "too_large": return "A part of the manuscript was too large to send. Try a shorter file.";
+      case "refused": return "Claude declined to work on this part of the manuscript.";
+      case "invalid_json": return "The reply wasn’t readable. Try again.";
+      case "truncated": return "The manuscript part was too big to finish in one reply. "
+        + "Try again — parts are split smaller now — or raise MAX_TOKENS on the server.";
+      case "network": return "The dashboard couldn’t reach its server. Check that the server is running.";
+      case "bad_request": return "The API rejected the request" + (e.message ? ": " + e.message : ".");
+      default: return "Something went wrong before this finished. Try again.";
+    }
+  }
+  /* ---------- review ---------- */
+  function bookLine(){
+    const m = S.meta;
+    return (m.title ? `Title: ${m.title}\n` : "") + `Book type: ${m.type}\nPublished on Amazon KDP and IngramSpark.`;
+  }
+  function reviewPrompt(i){
+    const n = S.chunks.length;
+    const again = S.round > 1;
+    return `You are an outside editor hired to review a manuscript for a self-published book.
+You did not write any of this text and you have no stake in defending it. A different AI model
+wrote or revised it. Your job is to find what is actually wrong, not to be encouraging.
+${bookLine()}
+
+Review this manuscript for all three of the following, every time:
+1. EDITING — structure, pacing, repetition, weak or padded passages, tone that does not match the book type.
+2. PROOFREADING — spelling, grammar, punctuation, capitalisation, and inconsistent formatting or style.
+3. FACT-CHECKING — claims that are wrong, outdated, unverifiable, or stated with more confidence than the
+   evidence supports. Name the specific claim and say what is actually true where you can.
+${S.meta.ask ? `\nThe publisher also asked: "${S.meta.ask}"` : ""}
+${again ? `\nThis is review round ${S.round}. An earlier round of fixes has already been applied to this text.
+Do not credit that work. Read it fresh and look especially for problems the previous round introduced,
+missed, or only half-fixed.` : ""}
+
+${n > 1 ? `The manuscript is split into ${n} parts. This is part ${i+1} of ${n}. Review only this part, but flag book-wide problems if you see them here.` : "This is the full manuscript."}
+
+Report real problems only, ordered from most to least serious, at most 12. Do not invent problems to
+fill the list — if this part is genuinely clean, return fewer issues or none. Group repeated instances
+of the same problem into one issue. Prefer the big structural and factual problems over small stylistic
+preferences; a reader noticing an error matters more than a comma you would have placed differently.
+
+Reply with only JSON in this shape:
+{"issues":[{"title":"short name of the problem","category":"one of: ${CATS.join(", ")}","severity":"high|medium|low","location":"where it occurs, e.g. chapter or section name","excerpt":"a short passage copied exactly from the manuscript that shows the problem, under 200 characters, or empty string if the problem is an absence","problem":"one or two sentences on what is wrong and why it matters to readers or sales","suggestion":"one or two sentences on how to fix it"}]}
+
+Manuscript${n > 1 ? " part " + (i+1) : ""}:
+<<<
+${S.chunks[i]}
+>>>`;
+  }
+  function normIssue(it, part, j){
+    const sev = String(it.severity || "").toLowerCase();
+    return {
+      id: `p${part}-${j}`, part,
+      title: String(it.title || "Untitled issue").slice(0, 160),
+      category: String(it.category || ""),
+      severity: SEV[sev] != null ? sev : "medium",
+      location: String(it.location || ""),
+      excerpt: String(it.excerpt || "").slice(0, 400),
+      problem: String(it.problem || ""),
+      suggestion: String(it.suggestion || ""),
+      decision: null, note: ""
+    };
+  }
+
+  async function runReview(){
+    uploadError("");
+    S.meta = { title: $("#title").value.trim(), type: $("#type").value, ask: $("#ask").value.trim() };
+    S.chunks = splitChunks(S.text);
+    S.issues = []; S.edits = []; S.approved = []; S.partial = 0;
+    const ctl = new AbortController(); S.ctl = ctl;
+    const n = S.chunks.length;
+    const who = CFG.reviewer;
+    startWork("upload", n > 1 ? `${who} is reading part 1 of ${n}` : `${who} is reading the manuscript`, n);
+    try{
+      for (let i = 0; i < n; i++){
+        setPart(i, n > 1 ? `${who} is reading part ${i+1} of ${n}` : `${who} is reading the manuscript`);
+        const res = await callModel("review", reviewPrompt(i), ctl.signal);
+        const list = Array.isArray(res && res.issues) ? res.issues : Array.isArray(res) ? res : [];
+        list.forEach((it, j) => S.issues.push(normIssue(it, i, j)));
+      }
+    }catch(e){
+      stopWork();
+      if (S.issues.length){
+        finishIssues();
+        if (!(e && e.code === "cancelled")) toast(errCopy(e) + " Showing what was found so far.");
+      } else {
+        show("upload");
+        if (!(e && e.code === "cancelled")) uploadError(errCopy(e));
+      }
+      return;
+    }
+    stopWork();
+    finishIssues();
+  }
+  function finishIssues(){
+    S.issues.sort((a,b) => SEV[a.severity] - SEV[b.severity]);
+    renderIssues(); show("issues");
+  }
+  $("#reviewBtn").addEventListener("click", runReview);
+
+  /* ---------- round history ----------
+     Each round is one pass: reviewer finds problems, you choose, writer fixes. */
+  function renderRounds(){
+    const bar = $("#roundBar");
+    if (S.round < 2 && !S.history.length){ bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.replaceChildren(el("span", { class:"lbl", text: "Rounds" }));
+    S.history.forEach(h => bar.append(el("span", { class:"pill",
+      text: `${h.round}. ${h.found} found · ${h.fixed} fixed` })));
+    bar.append(el("span", { class:"pill now", text: `${S.round}. this round` }));
+  }
+
+  /* ---------- issue list ---------- */
+  function renderIssues(){
+    const list = $("#issueList"); list.replaceChildren();
+    const n = S.issues.length;
+    $("#issuesTitle").textContent = n === 0 ? "Nothing to fix" : n === 1 ? "1 thing to look at" : `${n} things to look at`;
+    $("#issuesSub").textContent = n === 0
+      ? `${CFG.reviewer} read it and didn’t find anything worth changing.`
+      : `${S.source}, ${words(S.text).toLocaleString()} words. Mark each one Fix or Leave as is.`;
+    $("#whoIssues").innerHTML = n === 0 ? "" :
+      `Found by <b>${esc(S.usedModel || CFG.reviewer)}</b>. Nothing changes until you press Apply — ` +
+      `then <b>${esc(CFG.writer)}</b> makes only the fixes you approved.`;
+    renderRounds();
+    $("#fixAll").hidden = $("#skipAll").hidden = n === 0;
+    S.issues.forEach((iss, i) => list.append(issueCard(iss, i + 1)));
+    updateTally();
+  }
+  function issueCard(iss, n){
+    const card = el("article", { class: "sheet issue" + (iss.decision ? " " + iss.decision : "") });
+    const sev = el("span", { class:"sev " + iss.severity },
+      el("i", { "aria-hidden":"true" }, el("b"), el("b"), el("b")),
+      iss.severity[0].toUpperCase() + iss.severity.slice(1));
+    const meta = el("div", { class:"meta" },
+      el("span", { class:"num", text: String(n).padStart(2, "0") }),
+      el("span", { class:"dot", "aria-hidden":"true" }),
+      sev,
+      iss.category ? el("span", { class:"dot", "aria-hidden":"true" }) : null,
+      iss.category ? el("span", { text: iss.category }) : null,
+      iss.location ? el("span", { class:"dot", "aria-hidden":"true" }) : null,
+      iss.location ? el("span", { text: (S.chunks.length > 1 ? `Part ${iss.part+1}, ` : "") + iss.location }) : null
+    );
+    const body = el("div", { class:"body" }, meta, el("h3", { text: iss.title }));
+    if (iss.excerpt) body.append(el("p", { class:"excerpt" }, el("q", { text: iss.excerpt })));
+    if (iss.problem) body.append(el("p", { class:"problem", text: iss.problem }));
+    if (iss.suggestion) body.append(el("p", { class:"suggest" }, el("b", { text:"Suggested fix: " }), iss.suggestion));
+
+    const yes = el("button", { type:"button", class:"yes", "aria-pressed": String(iss.decision === "fix"), text:"Fix" });
+    const no  = el("button", { type:"button", class:"no",  "aria-pressed": String(iss.decision === "skip"), text:"Leave as is" });
+    const toggle = el("div", { class:"toggle", role:"group", "aria-label": "Decision for " + iss.title }, yes, no);
+    const ta = el("textarea", { placeholder:"e.g. keep the jokes, just make them shorter" });
+    ta.value = iss.note;
+    ta.addEventListener("input", () => { iss.note = ta.value; });
+    const noteWrap = el("label", {}, "Fix it, but…", ta);
+    const hint = el("p", { class:"hint", text:"Mark it Fix to tell the writer how." });
+    const margin = el("div", { class:"margin" }, toggle, noteWrap, hint);
+
+    const sync = () => {
+      card.className = "sheet issue" + (iss.decision ? " " + iss.decision : "");
+      yes.setAttribute("aria-pressed", String(iss.decision === "fix"));
+      no.setAttribute("aria-pressed", String(iss.decision === "skip"));
+      noteWrap.hidden = iss.decision !== "fix";
+      hint.hidden = iss.decision === "fix";
+      updateTally();
+    };
+    yes.addEventListener("click", () => { iss.decision = iss.decision === "fix" ? null : "fix"; sync(); if (iss.decision === "fix") ta.focus(); });
+    no.addEventListener("click", () => { iss.decision = iss.decision === "skip" ? null : "skip"; sync(); });
+    card.append(body, margin);
+    sync();
+    iss._sync = sync;
+    return card;
+  }
+  function updateTally(){
+    const fix = S.issues.filter(i => i.decision === "fix").length;
+    const skip = S.issues.filter(i => i.decision === "skip").length;
+    $("#tFix").textContent = fix; $("#tSkip").textContent = skip; $("#tOpen").textContent = S.issues.length - fix - skip;
+    const b = $("#applyBtn");
+    b.disabled = fix === 0;
+    b.textContent = fix === 0 ? "Apply fixes" : fix === 1 ? "Apply 1 fix" : `Apply ${fix} fixes`;
+  }
+  $("#fixAll").addEventListener("click", () => S.issues.forEach(i => { i.decision = "fix"; i._sync && i._sync(); }));
+  $("#skipAll").addEventListener("click", () => S.issues.forEach(i => { i.decision = "skip"; i._sync && i._sync(); }));
+  $("#newUpload").addEventListener("click", () => {
+    S.round = 1; S.history = []; S.usedModel = "";
+    show("upload");
+  });
+
+  /* ---------- apply fixes ---------- */
+  function applyPrompt(i){
+    const n = S.chunks.length;
+    const fixes = S.approved.map((iss, k) =>
+      `[${k+1}] ${iss.title}
+Problem: ${iss.problem}
+Suggested fix: ${iss.suggestion}${iss.excerpt ? `\nExample passage: "${iss.excerpt}"` : ""}${iss.note.trim() ? `\nPublisher's direction (follow this over the suggested fix where they differ): ${iss.note.trim()}` : ""}`
+    ).join("\n\n");
+    return `You are editing a manuscript for a self-published book to fix specific approved problems.
+${bookLine()}
+
+Approved fixes:
+${fixes}
+
+${n > 1 ? `The manuscript is split into ${n} parts. This is part ${i+1} of ${n}. Apply each fix wherever the problem occurs in this part.` : "This is the full manuscript."}
+
+Reply with only JSON in this shape:
+{"edits":[{"fix":1,"op":"replace","find":"exact text from the manuscript","text":"new text","all":false}]}
+
+Rules:
+- "fix" is the number of the approved fix the edit belongs to.
+- op "replace": "find" is replaced by "text". op "delete": "find" is removed. op "insert_after": "text" is inserted directly after "find" (start "text" with line breaks if it should be a new paragraph).
+- Copy "find" character for character from the manuscript. Make it long enough to be unique, usually a full sentence or line. Edits must not overlap.
+- Set "all" to true only when the identical "find" text should change every time it appears in this part.
+- Change only what the approved fixes require. Keep the author's voice and everything else as is.
+- Keep "find" and "text" as short as they can be while staying unique. Do not quote whole paragraphs
+  when a sentence will do, and never restate text that is not changing.
+- Prefer focused edits over rewriting long passages. At most 20 edits in this reply. If more are
+  needed, make the 20 most important ones — the rest can be caught on the next round.
+- If a fix does not apply to this part, make no edits for it. If nothing applies, reply {"edits":[]}.
+
+Manuscript${n > 1 ? " part " + (i+1) : ""}:
+<<<
+${S.chunks[i]}
+>>>`;
+  }
+
+  async function runFixes(){
+    S.approved = S.issues.filter(i => i.decision === "fix");
+    if (!S.approved.length) return;
+    S.edits = []; S.partial = 0;
+    const ctl = new AbortController(); S.ctl = ctl;
+    const n = S.chunks.length;
+    startWork("issues", n > 1 ? `${CFG.writer} is fixing part 1 of ${n}` : `${CFG.writer} is making the fixes`, n);
+    let failure = null;
+    try{
+      for (let i = 0; i < n; i++){
+        setPart(i, n > 1 ? `${CFG.writer} is fixing part ${i+1} of ${n}` : `${CFG.writer} is making the fixes`);
+        const res = await callModel("fix", applyPrompt(i), ctl.signal);
+        const list = Array.isArray(res && res.edits) ? res.edits : [];
+        for (const e of list){
+          const k = Number(e.fix) - 1;
+          const iss = S.approved[k];
+          const op = ["replace","delete","insert_after"].includes(e.op) ? e.op : "replace";
+          if (!iss || typeof e.find !== "string" || !e.find) continue;
+          S.edits.push({ part:i, issueId: iss.id, op, find: e.find, text: typeof e.text === "string" ? e.text : "", all: !!e.all, keep:true, status:"" });
+        }
+      }
+    }catch(e){ failure = e; }
+    stopWork();
+    if (failure && !S.edits.length){
+      show("issues");
+      if (failure.code !== "cancelled") toast(errCopy(failure));
+      return;
+    }
+    recompute(); renderResult(); show("result");
+    // One message only, most important first.
+    if (failure && failure.code === "cancelled") toast("Stopped. Showing the changes made so far.");
+    else if (failure) toast(errCopy(failure) + " Some parts weren’t edited.");
+    else if (S.partial) toast(
+      `${S.partial === 1 ? "One part" : S.partial + " parts"} ran out of room, so only the changes ` +
+      `made before the cut-off were kept. Send it back for another review to catch the rest.`);
+  }
+  $("#applyBtn").addEventListener("click", runFixes);
+
+  function looseRe(needle, flags){
+    const t = needle.trim(); if (!t) return null;
+    const src = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+")
+      .replace(/['‘’]/g, "['‘’]")
+      .replace(/["“”]/g, '["“”]')
+      .replace(/[-–—]/g, "[-–—]");
+    try { return new RegExp(src, flags); } catch { return null; }
+  }
+  function locate(hay, needle){
+    const i = hay.indexOf(needle);
+    if (i >= 0) return { index:i, length:needle.length };
+    const re = looseRe(needle, "");
+    const m = re && re.exec(hay);
+    return m ? { index:m.index, length:m[0].length } : null;
+  }
+  function applyEdits(text, edits){
+    let out = text;
+    for (const e of edits){
+      if (!e.keep){ e.status = "undone"; continue; }
+      const loc = locate(out, e.find);
+      if (!loc){ e.status = "missing"; continue; }
+      if (e.op === "insert_after"){
+        const at = loc.index + loc.length;
+        out = out.slice(0, at) + e.text + out.slice(at);
+      } else {
+        const rep = e.op === "delete" ? "" : e.text;
+        if (e.all){
+          const re = looseRe(e.find, "g");
+          out = re ? out.replace(re, () => rep) : out.split(e.find).join(rep);
+        } else {
+          out = out.slice(0, loc.index) + rep + out.slice(loc.index + loc.length);
+        }
+      }
+      e.status = "applied";
+    }
+    return out;
+  }
+  function recompute(){
+    S.revised = S.chunks.map((c, i) => applyEdits(c, S.edits.filter(e => e.part === i))).join("");
+    $("#fullText").value = S.revised;
+    const applied = S.edits.filter(e => e.status === "applied").length;
+    const missing = S.edits.filter(e => e.status === "missing").length;
+    $("#resultTitle").textContent = applied === 1 ? "1 change made" : `${applied} changes made`;
+    $("#resultSub").textContent =
+      `Across ${S.approved.length} approved ${S.approved.length === 1 ? "fix" : "fixes"}. Uncheck any change to undo it.` +
+      (missing ? ` ${missing} ${missing === 1 ? "change" : "changes"} couldn’t be matched to the text and weren’t applied.` : "");
+    $("#whoResult").innerHTML =
+      `Written by <b>${esc(CFG.writer)}</b> from fixes you approved. ` +
+      `Send it back and <b>${esc(CFG.reviewer)}</b> will read the new version fresh.`;
+  }
+
+  function renderResult(){
+    const wrap = $("#changeList"); wrap.replaceChildren();
+    for (const iss of S.approved){
+      const mine = S.edits.filter(e => e.issueId === iss.id);
+      const g = el("section", { class:"sheet group" },
+        el("h3", {}, iss.title, el("span", { text: mine.length === 1 ? "1 change" : `${mine.length} changes` })));
+      if (iss.note.trim()) g.append(el("p", { class:"usernote", text: "Your direction: " + iss.note.trim() }));
+      if (!mine.length) g.append(el("p", { class:"none", text:"No text changes were made for this one. It may need changes outside the manuscript text, like the cover or layout." }));
+      for (const e of mine) g.append(changeRow(e));
+      wrap.append(g);
+    }
+  }
+  function changeRow(e){
+    const box = el("input", { type:"checkbox", "aria-label":"Keep this change" });
+    box.checked = e.keep;
+    const txt = el("div", { class:"txt" });
+    if (e.op === "insert_after"){
+      const a = e.find.length > 120 ? "…" + e.find.slice(-120) : e.find;
+      txt.append(el("span", { class:"anchor", text: a }), el("ins", { text: e.text }));
+    } else {
+      txt.append(el("del", { text: e.find }));
+      if (e.op !== "delete" && e.text) txt.append(" ", el("ins", { text: e.text }));
+    }
+    const status = el("span", { class:"status" });
+    txt.append(status);
+    const row = el("div", { class:"change" }, box, txt);
+    const paint = () => {
+      row.classList.toggle("off", e.status !== "applied");
+      box.disabled = e.status === "missing" && e.keep;
+      status.className = "status" + (e.status === "undone" ? " undone" : "");
+      status.textContent = e.status === "missing" ? "Couldn’t find this passage, so it wasn’t changed."
+        : e.status === "undone" ? "Undone" : e.all ? "Changed everywhere it appears" : "";
+    };
+    box.addEventListener("change", () => {
+      e.keep = box.checked; recompute();
+      document.querySelectorAll(".change").forEach(r => r._paint && r._paint());
+    });
+    row._paint = paint; paint();
+    return row;
+  }
+
+  /* ---------- downloads ---------- */
+  function baseName(){
+    const b = (S.meta.title || S.source || "manuscript").replace(/\.[^.]+$/, "").replace(/[^\w\- ]+/g, "").trim();
+    return b || "manuscript";
+  }
+  function downloadFile(filename, data){
+    const url = URL.createObjectURL(new Blob([data], { type: "text/plain;charset=utf-8" }));
+    const a = el("a", { href: url, download: filename });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+  $("#dlText").addEventListener("click", () => downloadFile(baseName() + " - revised.txt", S.revised));
+  $("#dlReport").addEventListener("click", () => {
+    const lines = [`# Change report: ${S.meta.title || S.source}`, ""];
+    lines.push(`Round: ${S.round}`);
+    lines.push(`Reviewed by: ${S.usedModel || CFG.reviewer} (editing, proofreading, fact-checking)`);
+    lines.push(`Fixes written by: ${CFG.writer}`);
+    if (S.meta.ask) lines.push(`Publisher also asked: ${S.meta.ask}`);
+    lines.push("");
+    lines.push("## Left as is", "");
+    const skipped = S.issues.filter(i => i.decision !== "fix");
+    lines.push(...(skipped.length ? skipped.map(i => `- ${i.title} (${i.severity})`) : ["- None"]), "");
+    lines.push("## Fixed", "");
+    for (const iss of S.approved){
+      lines.push(`### ${iss.title}`, "", iss.problem, "");
+      if (iss.note.trim()) lines.push(`Direction: ${iss.note.trim()}`, "");
+      const mine = S.edits.filter(e => e.issueId === iss.id && e.status === "applied");
+      if (!mine.length) lines.push("No text changes.", "");
+      for (const e of mine){
+        if (e.op === "insert_after") lines.push(`- Added after “${e.find.slice(-80)}”: “${e.text.trim()}”`);
+        else if (e.op === "delete") lines.push(`- Removed: “${e.find}”`);
+        else lines.push(`- “${e.find}” → “${e.text}”`);
+      }
+      lines.push("");
+    }
+    downloadFile(baseName() + " - change report.md", lines.join("\n"));
+  });
+  $("#backIssues").addEventListener("click", () => { renderIssues(); show("issues"); });
+
+  /* The loop, driven by you and not by a timer: the revised text goes back to
+     the reviewing model, which reads it fresh and says what is still wrong. */
+  $("#reReview").addEventListener("click", () => {
+    S.history.push({
+      round: S.round,
+      found: S.issues.length,
+      fixed: S.edits.filter(e => e.status === "applied").length
+    });
+    S.round += 1;
+    setManuscript(S.revised, S.source.replace(/ \(round \d+\)$/, "") + ` (round ${S.round})`);
+    runReview();
+  });
+
+  loadConfig();
+
+  /* Preview hooks, used only by the design screenshot script in tools/.
+     They render sample issues without spending an API call. */
+  window.__seed = (issues) => {
+    S.meta = { title: $("#title").value.trim() || "Sample book", type: $("#type").value, ask: "" };
+    S.chunks = splitChunks(S.text || "sample");
+    S.source = S.source || "sample.docx";
+    S.usedModel = CFG.reviewer;
+    S.issues = issues.map((it, j) => normIssue(it, 0, j));
+    finishIssues();
+  };
+  window.__decide = () => {
+    S.issues.forEach((iss, i) => {
+      if (i === 0){ iss.decision = "fix"; iss.note = "Use 366 and cite the IOC list."; }
+      else if (i === 2){ iss.decision = "fix"; iss.note = "Remove it. Don't mention periods at all."; }
+      else if (i === 4){ iss.decision = "skip"; }
+    });
+    renderIssues();
+  };
+})();
+</script>
+</body>
+</html>
