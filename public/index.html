@@ -249,6 +249,9 @@ fieldset.checks label::before{content:"";width:15px;height:15px;border-radius:2p
 .issue .problem{margin:0 0 10px;max-width:62ch;line-height:1.6;font-size:.97rem}
 .issue .suggest{margin:0;color:var(--graphite);max-width:62ch;line-height:1.55;font-size:.92rem}
 .issue .suggest b{color:var(--ink);font-weight:600}
+/* Already settled in an earlier round: says so, so a repeat never passes for a new problem. */
+.issue .repeat{margin:14px 0 0;max-width:62ch;font-size:.88rem;line-height:1.5;color:var(--ink);
+  border-left:3px solid var(--amber);padding:6px 0 6px 12px}
 
 /* Fix / Leave — a quiet two-way switch, not a pair of shouting buttons. */
 .toggle{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--rule);border-radius:3px;
@@ -589,7 +592,7 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
   const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 
   const S = { text:"", source:"", chunks:[], issues:[], edits:[], approved:[], revised:"", ctl:null, meta:{},
-              round:1, history:[], usedModel:"" };
+              round:1, history:[], ledger:[], usedModel:"" };
   const SEV = { high:0, medium:1, low:2 };
   const CATS = ["Structure","Content","Accuracy","Consistency","Formatting","Copyediting","Reader experience","KDP compliance"];
 
@@ -776,9 +779,12 @@ Review this manuscript for all three of the following, every time:
 3. FACT-CHECKING — claims that are wrong, outdated, unverifiable, or stated with more confidence than the
    evidence supports. Name the specific claim and say what is actually true where you can.
 ${S.meta.ask ? `\nThe publisher also asked: "${S.meta.ask}"` : ""}
-${again ? `\nThis is review round ${S.round}. An earlier round of fixes has already been applied to this text.
-Do not credit that work. Read it fresh and look especially for problems the previous round introduced,
-missed, or only half-fixed.` : ""}
+${again ? `\nThis is review round ${S.round}. Earlier rounds have already been through this text and applied fixes.
+Look for problems that are still there, and for real errors the fixes introduced. Do not re-edit text that is
+already correct just because you would have phrased it differently. Every change you suggest costs the author a
+rewrite, and trading one acceptable wording for another never ends. If what remains is minor or a matter of
+taste, return few issues or none.` : ""}
+${again ? settledBlock(S.chunks[i]) : ""}
 
 ${n > 1 ? `The manuscript is split into ${n} parts. This is part ${i+1} of ${n}. Review only this part, but flag book-wide problems if you see them here.` : "This is the full manuscript."}
 
@@ -841,7 +847,9 @@ ${S.chunks[i]}
     finishIssues();
   }
   function finishIssues(){
-    S.issues.sort((a,b) => SEV[a.severity] - SEV[b.severity]);
+    markRepeats();
+    // Anything already settled sinks to the bottom, so new problems come first.
+    S.issues.sort((a,b) => (!!a.repeat - !!b.repeat) || SEV[a.severity] - SEV[b.severity]);
     renderIssues(); show("issues");
   }
   $("#reviewBtn").addEventListener("click", runReview);
@@ -858,14 +866,100 @@ ${S.chunks[i]}
     bar.append(el("span", { class:"pill now", text: `${S.round}. this round` }));
   }
 
+  /* ---------- memory across rounds ----------
+     Each round the reviewer reads the text cold. Without this it re-raises what
+     you already settled and picks at the writer's own fixes, so the same
+     passages change round after round and the loop never ends. The ledger
+     remembers what was fixed (and how) and what you chose to leave. */
+  function recordRound(){
+    for (const iss of S.issues){
+      if (iss.repeat && iss.decision === "skip") continue;   // already in the ledger
+      const mine = S.edits.filter(e => e.issueId === iss.id);
+      const applied = mine.filter(e => e.status === "applied");
+      const base = { round: S.round, title: iss.title, excerpt: iss.excerpt };
+      if (iss.decision === "fix" && applied.length){
+        S.ledger.push({ ...base, decision: "fix", changes: applied.map(e => ({
+          before: e.op === "insert_after" ? "" : e.find,
+          after:  e.op === "delete" ? "" : e.text })) });
+      } else if (iss.decision === "skip" || (iss.decision === "fix" && mine.some(e => !e.keep))){
+        // Unticking every change is a decision too.
+        S.ledger.push({ ...base, decision: "skip", changes: [] });
+      }
+    }
+  }
+
+  const norm = (s) => String(s).toLowerCase()
+    .replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ").trim();
+  // Two passages overlap if one contains the other or they share a run of seven words.
+  function overlaps(a, b){
+    const x = norm(a), y = norm(b);
+    if (x.length < 12 || y.length < 12) return false;
+    if (x.includes(y) || y.includes(x)) return true;
+    const [short, long] = x.length < y.length ? [x, y] : [y, x];
+    const w = short.split(" "), n = Math.min(7, w.length);
+    for (let i = 0; i + n <= w.length; i++) if (long.includes(w.slice(i, i + n).join(" "))) return true;
+    return false;
+  }
+
+  const rewritten = (l) => l.changes.map(c => c.after.trim()).filter(t => t.length >= 12);
+  // Only the settled items whose text is in this part, plus those with no text to find.
+  function ledgerFor(chunk){
+    return S.ledger.filter(l => {
+      const texts = l.decision === "fix" ? rewritten(l) : [l.excerpt].filter(Boolean);
+      return !texts.length || texts.some(t => locate(chunk, t.trim()));
+    }).slice(-60);
+  }
+  function settledBlock(chunk){
+    const led = ledgerFor(chunk);
+    if (!led.length) return "";
+    const cut = (s, n = 220) => (s = s.trim()).length > n ? s.slice(0, n) + "…" : s;
+    const change = (c) => !c.before ? `added "${cut(c.after)}"`
+      : !c.after ? `removed "${cut(c.before)}"` : `"${cut(c.before)}" → "${cut(c.after)}"`;
+    const lines = led.map(l => l.decision === "skip"
+      ? `- LEFT AS IS by the publisher (round ${l.round}): ${l.title}${l.excerpt ? ` — "${cut(l.excerpt)}"` : ""}`
+      : `- FIXED in round ${l.round}: ${l.title}\n` + l.changes.slice(0, 3).map(c => "    " + change(c)).join("\n"));
+    return `
+Already settled in earlier rounds. The publisher has decided every item below. Do not raise any of them
+again, in any wording. Do not suggest rewording any passage that was added or appears after a "→" below
+unless it now contains an objective error: a wrong fact, a spelling or grammar mistake, or a contradiction
+with the rest of the book. Saying the same thing differently is not a problem.
+${lines.join("\n")}
+`;
+  }
+
+  /* The prompt asks the reviewer not to repeat itself; this catches it when it
+     does anyway. Repeats are set to Leave as is and say why. You can still flip
+     them. A high-severity problem inside a rewritten passage could be a real
+     error the fix introduced, so that one is flagged but left for you to judge. */
+  function markRepeats(){
+    if (!S.ledger.length) return;
+    for (const iss of S.issues){
+      if (!iss.excerpt || iss.repeat) continue;
+      const left = S.ledger.find(l => l.decision === "skip" && l.excerpt && overlaps(iss.excerpt, l.excerpt));
+      const fixed = left ? null : S.ledger.find(l => l.decision === "fix" && rewritten(l).some(t => overlaps(iss.excerpt, t)));
+      if (left){
+        iss.repeat = `Raised before: you left this as is in round ${left.round}.`;
+        iss.decision = "skip";
+      } else if (fixed){
+        iss.repeat = `This passage was already rewritten in round ${fixed.round} (“${fixed.title}”). ` +
+          `The reviewer may just be re-editing that fix.`;
+        if (iss.severity !== "high") iss.decision = "skip";
+      }
+    }
+  }
+
   /* ---------- issue list ---------- */
   function renderIssues(){
     const list = $("#issueList"); list.replaceChildren();
     const n = S.issues.length;
+    const repeats = S.issues.filter(i => i.repeat).length;
     $("#issuesTitle").textContent = n === 0 ? "Nothing to fix" : n === 1 ? "1 thing to look at" : `${n} things to look at`;
     $("#issuesSub").textContent = n === 0
       ? `${CFG.reviewer} read it and didn’t find anything worth changing.`
-      : `${S.source}, ${words(S.text).toLocaleString()} words. Mark each one Fix or Leave as is.`;
+      : `${S.source}, ${words(S.text).toLocaleString()} words. Mark each one Fix or Leave as is.` +
+        (repeats ? ` ${repeats === 1 ? "One was" : repeats + " were"} already settled in an earlier round. ` +
+          `${repeats === 1 ? "It is" : "They are"} at the bottom of the list. Change any you disagree with.` : "");
     $("#whoIssues").innerHTML = n === 0 ? "" :
       `Found by <b>${esc(S.usedModel || CFG.reviewer)}</b>. Nothing changes until you press Apply — ` +
       `then <b>${esc(CFG.writer)}</b> makes only the fixes you approved.`;
@@ -892,6 +986,7 @@ ${S.chunks[i]}
     if (iss.excerpt) body.append(el("p", { class:"excerpt" }, el("q", { text: iss.excerpt })));
     if (iss.problem) body.append(el("p", { class:"problem", text: iss.problem }));
     if (iss.suggestion) body.append(el("p", { class:"suggest" }, el("b", { text:"Suggested fix: " }), iss.suggestion));
+    if (iss.repeat) body.append(el("p", { class:"repeat", text: iss.repeat }));
 
     const yes = el("button", { type:"button", class:"yes", "aria-pressed": String(iss.decision === "fix"), text:"Fix" });
     const no  = el("button", { type:"button", class:"no",  "aria-pressed": String(iss.decision === "skip"), text:"Leave as is" });
@@ -926,10 +1021,11 @@ ${S.chunks[i]}
     b.disabled = fix === 0;
     b.textContent = fix === 0 ? "Apply fixes" : fix === 1 ? "Apply 1 fix" : `Apply ${fix} fixes`;
   }
-  $("#fixAll").addEventListener("click", () => S.issues.forEach(i => { i.decision = "fix"; i._sync && i._sync(); }));
+  // Fix all leaves settled repeats alone; otherwise one click undoes the whole ledger.
+  $("#fixAll").addEventListener("click", () => S.issues.forEach(i => { if (!i.repeat){ i.decision = "fix"; i._sync && i._sync(); } }));
   $("#skipAll").addEventListener("click", () => S.issues.forEach(i => { i.decision = "skip"; i._sync && i._sync(); }));
   $("#newUpload").addEventListener("click", () => {
-    S.round = 1; S.history = []; S.usedModel = "";
+    S.round = 1; S.history = []; S.ledger = []; S.usedModel = "";
     show("upload");
   });
 
@@ -941,12 +1037,20 @@ ${S.chunks[i]}
 Problem: ${iss.problem}
 Suggested fix: ${iss.suggestion}${iss.excerpt ? `\nExample passage: "${iss.excerpt}"` : ""}${iss.note.trim() ? `\nPublisher's direction (follow this over the suggested fix where they differ): ${iss.note.trim()}` : ""}`
     ).join("\n\n");
+    // Passages earlier rounds already rewrote. Left unprotected, they get rewritten again every round.
+    const locked = S.ledger.filter(l => l.decision === "fix").flatMap(rewritten)
+      .filter(t => locate(S.chunks[i], t)).slice(-40)
+      .map(t => `- "${t.length > 300 ? t.slice(0, 300) + "…" : t}"`).join("\n");
     return `You are editing a manuscript for a self-published book to fix specific approved problems.
 ${bookLine()}
 
 Approved fixes:
 ${fixes}
-
+${locked ? `
+These passages were already rewritten in earlier rounds and the publisher accepted them. Leave them exactly
+as they are unless an approved fix above is specifically about one of them:
+${locked}
+` : ""}
 ${n > 1 ? `The manuscript is split into ${n} parts. This is part ${i+1} of ${n}. Apply each fix wherever the problem occurs in this part.` : "This is the full manuscript."}
 
 Reply with only JSON in this shape:
@@ -1148,6 +1252,7 @@ ${S.chunks[i]}
       found: S.issues.length,
       fixed: S.edits.filter(e => e.status === "applied").length
     });
+    recordRound();
     S.round += 1;
     setManuscript(S.revised, S.source.replace(/ \(round \d+\)$/, "") + ` (round ${S.round})`);
     runReview();

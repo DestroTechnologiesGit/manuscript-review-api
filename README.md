@@ -27,9 +27,15 @@ Everything lives in `manuscript-review-api/`.
 5. **Press Apply.** Only then does the rewriter touch the text, and only the items you approved.
 6. **Review the result.** Every change is a separate line you can untick to undo. Download the
    revised manuscript and a change report.
-7. **Send it back for another review.** The reviewer reads the new version fresh and tells you what is
-   still wrong — including anything the last round broke. You approve the next set. Repeat until
+7. **Send it back for another review.** The reviewer reads the new version and tells you what is
+   still wrong, including anything the last round broke. You approve the next set. Repeat until
    you are happy. A round counter shows what each pass found and fixed.
+
+   Rounds remember what you already settled. The reviewer is told which items you left as is and
+   which passages were already rewritten, and is asked not to raise them again. If it does anyway,
+   the item is set to Leave as is, marked "Raised before", and moved to the bottom of the list. The
+   rewriter is told to leave earlier rewrites alone. Without this memory, the two models keep
+   rewording each other's sentences and the loop never finishes.
 
 The loop only advances when you press the button.
 
@@ -83,8 +89,8 @@ for another review round, or raise `MAX_TOKENS`.
 - Requests name their model. The server routes by that model's provider, so either job can go to
   either company, and it ignores any model it did not offer.
 - The prompts are in `public/index.html` (`reviewPrompt` and `applyPrompt`). The review prompt tells
-  the reviewer it did not write the text and should not be encouraging; from round 2 on it also tells
-  it not to credit the previous round's work.
+  the reviewer it did not write the text and should not be encouraging; from round 2 on it also lists
+  what earlier rounds settled (`settledBlock`). `markRepeats` catches repeats the reviewer raises anyway.
 - Fixes come back as small find-and-replace edits applied in the browser, so every change can be
   undone individually.
 - Word files are read as plain text, so the download is a .txt without Word formatting.
