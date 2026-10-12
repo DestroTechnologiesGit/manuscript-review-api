@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { manuscriptToDocx } from "./docx-export.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -15,6 +16,9 @@ const REVIEWER_MODEL = process.env.OPENAI_MODEL || "gpt-5";
    far more room than the review step, which only reports. Current models allow
    up to 128k; 32k is a safe default that still finishes a large chunk. */
 const MAX_TOKENS = Number(process.env.MAX_TOKENS || 32000);
+/* The final line edit reads the whole book in one call and reports on all of
+   it, and a reasoning model's thinking counts against the same ceiling. */
+const LINE_EDIT_MAX_TOKENS = Number(process.env.LINE_EDIT_MAX_TOKENS || Math.max(MAX_TOKENS, 64000));
 const APP_PASSWORD = process.env.APP_PASSWORD || "";
 const REVIEW_EFFORT = process.env.REVIEW_EFFORT || "high";
 
@@ -93,7 +97,7 @@ function resolve(role, requested) {
   if (provider === "openai" && !openai) provider = null; // named it, but no key
   if (provider) return { model: requested, provider };
 
-  const canReview = role === "review" && openai;
+  const canReview = role !== "fix" && openai;
   return canReview
     ? { model: REVIEWER_MODEL, provider: "openai" }
     : { model: WRITER_MODEL, provider: "anthropic" };
@@ -182,7 +186,7 @@ const SYSTEM = "Reply with only valid JSON. No other text before or after it.";
    says what is wrong with it. It never writes the book, so it has no stake in
    defending the prose it is judging.
 --------------------------------------------------------------------------- */
-async function runOpenAI(prompt, signal, model, role) {
+async function runOpenAI(prompt, signal, model, role, maxTokens) {
   // Only reasoning models accept `reasoning`; gpt-4.x rejects it outright.
   const reasons = /^(gpt-[56789]|o[34])/.test(model);
   const response = await openai.responses.create(
@@ -191,7 +195,7 @@ async function runOpenAI(prompt, signal, model, role) {
       instructions: SYSTEM,
       input: prompt,
       ...(reasons ? { reasoning: { effort: REVIEW_EFFORT } } : {}),
-      max_output_tokens: MAX_TOKENS,
+      max_output_tokens: maxTokens,
     },
     { signal }
   );
@@ -215,11 +219,11 @@ async function runOpenAI(prompt, signal, model, role) {
    The writer: Claude. It only ever sees fixes the publisher approved, and it
    rewrites the text. It is never asked to judge its own work.
 --------------------------------------------------------------------------- */
-async function runAnthropic(prompt, signal, model, role) {
+async function runAnthropic(prompt, signal, model, role, maxTokens) {
   const stream = claude.messages.stream(
     {
       model,
-      max_tokens: MAX_TOKENS,
+      max_tokens: maxTokens,
       system: SYSTEM,
       messages: [{ role: "user", content: prompt }],
     },
@@ -255,9 +259,11 @@ async function handleModelCall(req, res) {
   if (!passwordOk(req)) return fail(res, 401, "unauthorized", "Wrong or missing password.");
 
   const prompt = req.body && req.body.prompt;
-  const role = req.body && req.body.role === "review" ? "review" : "fix";
+  // "review" and "lineedit" both read and report; only "fix" rewrites.
+  const role = ["review", "lineedit"].includes(req.body && req.body.role) ? req.body.role : "fix";
+  const key = role === "fix" ? "edits" : "issues";
   if (typeof prompt !== "string" || !prompt.trim()) return fail(res, 400, "bad_request", "Missing prompt.");
-  if (prompt.length > 600_000) return fail(res, 413, "too_large", "Prompt is too large.");
+  if (prompt.length > 1_200_000) return fail(res, 413, "too_large", "Prompt is too large.");
 
   // If the browser presses Stop (closes the request), stop paying for the answer.
   const controller = new AbortController();
@@ -267,13 +273,13 @@ async function handleModelCall(req, res) {
   const run = provider === "openai" ? runOpenAI : runAnthropic;
 
   try {
-    const { text, cutOff } = await run(prompt, controller.signal, model, role);
+    const maxTokens = role === "lineedit" ? LINE_EDIT_MAX_TOKENS : MAX_TOKENS;
+    const { text, cutOff } = await run(prompt, controller.signal, model, role, maxTokens);
     let data = parseJson(text);
     let partial = false;
 
     // A reply cut off mid-array still holds finished work. Keep what closed.
     if (data === undefined && cutOff) {
-      const key = role === "review" ? "issues" : "edits";
       const items = salvageArray(text, key);
       if (items) { data = { [key]: items }; partial = true; }
     }
@@ -286,8 +292,7 @@ async function handleModelCall(req, res) {
     }
 
     if (partial) {
-      const n = data[role === "review" ? "issues" : "edits"].length;
-      console.log(`  salvaged ${n} complete ${role === "review" ? "issues" : "edits"} from a truncated reply`);
+      console.log(`  salvaged ${data[key].length} complete ${key} from a truncated reply`);
     }
     res.json({ data, model, by: provider, partial });
   } catch (err) {
@@ -322,6 +327,21 @@ async function handleModelCall(req, res) {
 }
 
 app.post("/api/model", handleModelCall);
+
+/* The revised manuscript, or a report, as a Word file with real heading styles. */
+app.post("/api/export", async (req, res) => {
+  if (!passwordOk(req)) return fail(res, 401, "unauthorized", "Wrong or missing password.");
+  const text = req.body && req.body.text;
+  if (typeof text !== "string" || !text.trim()) return fail(res, 400, "bad_request", "Nothing to export.");
+  try {
+    const buf = await manuscriptToDocx(text, String((req.body && req.body.title) || ""));
+    res.set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.send(buf);
+  } catch (err) {
+    console.error(err);
+    fail(res, 500, "export_failed", "The Word file could not be built.");
+  }
+});
 
 // The old single-model route, kept so an older saved page still works.
 app.post("/api/claude", (req, res) => {

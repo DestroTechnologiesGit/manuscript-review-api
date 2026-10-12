@@ -26,7 +26,7 @@ Everything lives in `manuscript-review-api/`.
    there when the list is long.
 5. **Press Apply.** Only then does the rewriter touch the text, and only the items you approved.
 6. **Review the result.** Every change is a separate line you can untick to undo. Download the
-   revised manuscript and a change report.
+   revised manuscript and a change report, both as Word files (.docx).
 7. **Send it back for another review.** The reviewer reads the new version and tells you what is
    still wrong, including anything the last round broke. You approve the next set. Repeat until
    you are happy. A round counter shows what each pass found and fixed.
@@ -37,7 +37,33 @@ Everything lives in `manuscript-review-api/`.
    rewriter is told to leave earlier rewrites alone. Without this memory, the two models keep
    rewording each other's sentences and the loop never finishes.
 
+8. **Finish with the final line edit.** Once the facts are settled, press **Run the final line edit**
+   on the result page. You can also pick it under **Which pass** on the upload page for a book that
+   is already fact-checked. It runs the client's line-edit brief: writing quality only, no
+   fact-checking. It reads the whole book in one call, because duplicate stories and repeated
+   phrases only show up across chapters. The findings show up in the same Fix / Leave list,
+   in sections A to E, with the editor's verdict on top. **Download line-edit report** gives the
+   report in the client's layout. When the rewriter applies line-edit fixes, it is told to keep
+   every fact and safety point and change only how each one is worded.
+
 The loop only advances when you press the button.
+
+## Headings and the Word download
+
+Chapter titles come out as **Heading 1** and subheadings as **Heading 2**. These are real Word
+styles, so KDP, Kindle Create and Word's navigation pane can build the table of contents from them.
+Each chapter starts on a new page. Bullet lists stay bullet lists.
+
+- **.docx in:** headings are read from the file's own heading styles (Title counts as Heading 1).
+- **.md in:** `#` and `##` lines are used as they are.
+- **.txt, PDF, pasted text, or a .docx without heading styles:** headings are guessed. "Chapter 3",
+  "Introduction", "Conclusion" and the like become Heading 1. A short line standing on its own with
+  no sentence punctuation becomes Heading 2. The upload box shows how many of each it found, so
+  check that number before you start.
+
+While the models work, headings travel as `# ` and `## ` markers at the start of a line. Both
+models are told what the markers are and to keep them. Bold and italics inside paragraphs are not
+kept.
 
 ## Run it on your computer
 
@@ -67,6 +93,7 @@ anyone with the link can spend your API credits.
 | `CLAUDE_MODEL` | `claude-opus-5` | Which rewriter the dropdown starts on. |
 | `REVIEW_EFFORT` | `high` | How hard the reviewer thinks. `low`, `medium`, `high`, `xhigh`, `max`. |
 | `MAX_TOKENS` | `32000` | Longest reply allowed. The fix step needs the most room, because a rewrite quotes the text it replaces. |
+| `LINE_EDIT_MAX_TOKENS` | `64000` | Longest reply for the final line edit, which reports on the whole book at once. |
 
 Manuscripts are split into parts of roughly 35KB (`splitChunks` in `public/index.html`). Each part
 is one review call and one fix call. Parts are deliberately smaller than the model's input limit,
@@ -88,10 +115,11 @@ for another review round, or raise `MAX_TOKENS`.
   (with a built-in list as a fallback), plus the defaults. The page builds its dropdowns from it.
 - Requests name their model. The server routes by that model's provider, so either job can go to
   either company, and it ignores any model it did not offer.
-- The prompts are in `public/index.html` (`reviewPrompt` and `applyPrompt`). The review prompt tells
+- The prompts are in `public/index.html` (`reviewPrompt`, `lineEditPrompt` and `applyPrompt`). The
+  client's line-edit brief is `LINE_EDIT_BRIEF`; edit it there to change what the final pass checks.
+- `POST /api/export` takes `{ text, title }` and returns a .docx, built by `docx-export.js`. The review prompt tells
   the reviewer it did not write the text and should not be encouraging; from round 2 on it also lists
   what earlier rounds settled (`settledBlock`). `markRepeats` catches repeats the reviewer raises anyway.
 - Fixes come back as small find-and-replace edits applied in the browser, so every change can be
   undone individually.
-- Word files are read as plain text, so the download is a .txt without Word formatting.
 - Token usage for each call is printed in the server log, labelled `review` or `fix`.

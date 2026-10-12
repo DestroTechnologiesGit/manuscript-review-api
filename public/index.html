@@ -249,6 +249,13 @@ fieldset.checks label::before{content:"";width:15px;height:15px;border-radius:2p
 .issue .problem{margin:0 0 10px;max-width:62ch;line-height:1.6;font-size:.97rem}
 .issue .suggest{margin:0;color:var(--graphite);max-width:62ch;line-height:1.55;font-size:.92rem}
 .issue .suggest b{color:var(--ink);font-weight:600}
+/* The line editor's overall read, above its list. */
+.verdict{padding:20px 24px;margin-bottom:22px;border-left:3px solid var(--ink)}
+.verdict .vlbl{margin:0 0 6px;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;
+  font-weight:600;color:var(--graphite)}
+.verdict #verdictText{margin:0;font-family:var(--serif);font-size:1.15rem;line-height:1.55;max-width:62ch}
+.verdict .effort{margin:10px 0 0;font-size:.88rem;color:var(--graphite)}
+.verdict .effort b{color:var(--ink)}
 /* Already settled in an earlier round: says so, so a repeat never passes for a new problem. */
 .issue .repeat{margin:14px 0 0;max-width:62ch;font-size:.88rem;line-height:1.5;color:var(--ink);
   border-left:3px solid var(--amber);padding:6px 0 6px 12px}
@@ -384,7 +391,14 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
             <option>Fiction</option>
           </select>
         </label>
-        <fieldset class="f checks">
+        <label class="f">Which pass
+          <select class="inp" id="pass">
+            <option value="full">Full review: editing, proofreading, fact-checking</option>
+            <option value="lineedit">Final line edit: writing quality only</option>
+          </select>
+          <small id="passNote">Run this first. Send the book back as many times as it needs.</small>
+        </label>
+        <fieldset class="f checks" id="fullChecks">
           <legend>Every review covers</legend>
           <div class="row">
             <label><input type="checkbox" id="ckEdit" checked disabled> Editing</label>
@@ -426,10 +440,16 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
         <p class="whodoes" id="whoIssues"></p>
       </div>
       <div class="bulk">
+        <button type="button" class="btn ghost small" id="dlLineReport" hidden>Download line-edit report</button>
         <button type="button" class="btn ghost small" id="fixAll">Fix all</button>
         <button type="button" class="btn ghost small" id="skipAll">Leave all</button>
         <button type="button" class="btn ghost small" id="newUpload">New manuscript</button>
       </div>
+    </div>
+    <div class="sheet verdict" id="verdictBox" hidden>
+      <p class="vlbl">Line editor’s verdict</p>
+      <p id="verdictText"></p>
+      <p class="effort" id="effortText"></p>
     </div>
     <div id="issueList"></div>
   </section>
@@ -443,8 +463,9 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
     </div>
     <div class="actions">
       <button type="button" class="btn" id="reReview">Send back for another review</button>
-      <button type="button" class="btn ghost" id="dlText">Download revised manuscript</button>
-      <button type="button" class="btn ghost" id="dlReport">Download change report</button>
+      <button type="button" class="btn ghost" id="lineEdit">Run the final line edit</button>
+      <button type="button" class="btn ghost" id="dlText">Download revised manuscript (.docx)</button>
+      <button type="button" class="btn ghost" id="dlReport">Download change report (.docx)</button>
       <button type="button" class="btn ghost" id="backIssues">Change my choices</button>
     </div>
     <div id="changeList"></div>
@@ -493,7 +514,7 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
       res = await fetch("/api/model", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-app-password": sessionStorage.getItem("mr-pw") || "" },
-        body: JSON.stringify({ prompt, role, model: role === "review" ? CFG.reviewer : CFG.writer }),
+        body: JSON.stringify({ prompt, role, model: role === "fix" ? CFG.writer : CFG.reviewer }),
         signal
       });
     }catch(e){
@@ -511,7 +532,7 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
     if (!res.ok || !body || !("data" in body)){
       throw (body && body.error) || { code: "upstream_error" };
     }
-    if (body.model) S.usedModel = body.model;
+    if (body.model && role !== "fix") S.usedModel = body.model;
     if (body.partial) S.partial = (S.partial || 0) + 1;
     return body.data;
   }
@@ -592,7 +613,7 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
   const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 
   const S = { text:"", source:"", chunks:[], issues:[], edits:[], approved:[], revised:"", ctl:null, meta:{},
-              round:1, history:[], ledger:[], usedModel:"" };
+              round:1, history:[], ledger:[], usedModel:"", pass:"full", lineEdit:null };
   const SEV = { high:0, medium:1, low:2 };
   const CATS = ["Structure","Content","Accuracy","Consistency","Formatting","Copyediting","Reader experience","KDP compliance"];
 
@@ -639,9 +660,13 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
         "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js",
         "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"
       ]);
-      const r = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-      return r.value;
+      // Read as HTML, not raw text, so Word's heading styles survive the trip.
+      const r = await window.mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() }, {
+        styleMap: ["p[style-name='Title'] => h1:fresh", "p[style-name='Subtitle'] => h2:fresh"]
+      });
+      return htmlToMarked(r.value);
     }
+    if (/\.(md|markdown)$/.test(name)) return await file.text();   // already marked up
     if (name.endsWith(".pdf")){
       if (!window.pdfjsLib) await loadScript(["https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"]);
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -657,15 +682,75 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
   }
   const words = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
 
+  /* ---------- headings ----------
+     While the models work, headings travel as line markers, the same ones the
+     Word export reads back:  "# " chapter title (Heading 1), "## " subheading
+     (Heading 2), "### " smaller heading, "- " bullet. */
+  const MARKED = /^#{1,3} /m;
+  function htmlToMarked(html){
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const out = [];
+    const flat = (n) => n.textContent.replace(/\s+/g, " ").trim();
+    const walk = (parent) => {
+      for (const n of parent.children){
+        const tag = n.tagName.toLowerCase(), t = flat(n);
+        if (/^h[1-6]$/.test(tag)){ if (t) out.push("#".repeat(Math.min(3, +tag[1])) + " " + t); }
+        else if (tag === "ul") [...n.children].forEach(li => { const x = flat(li); if (x) out.push("- " + x); });
+        else if (tag === "ol") [...n.children].forEach((li, k) => { const x = flat(li); if (x) out.push(`${k+1}. ${x}`); });
+        else if (tag === "table") [...n.querySelectorAll("tr")].forEach(tr => {
+          const x = [...tr.children].map(flat).filter(Boolean).join("\t"); if (x) out.push(x); });
+        else if (tag === "blockquote" || tag === "div") walk(n);
+        else if (t) out.push(t);
+      }
+    };
+    walk(doc.body);
+    return out.join("\n\n");
+  }
+
+  /* Text with no heading styles (a .txt, a PDF, pasted text, or a Word file
+     that used bold instead of styles): guess. "Chapter 3" and front/back
+     matter become chapter titles; a short line standing on its own, with no
+     sentence punctuation, becomes a subheading. */
+  const CHAPTER = /^(chapter|part)\s+([0-9]+|[ivxlc]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/i;
+  const MATTER = /^(prologue|epilogue|introduction|conclusion|foreword|preface|afterword|acknowledg(e)?ments|about the author|glossary|resources|bibliography|contents|table of contents|appendix\b.*)$/i;
+  function headingLike(l){
+    return l.length <= 80 && l.split(/\s+/).length <= 12 && /^[A-Z0-9]/.test(l) &&
+      !/[.,;:!]$/.test(l) && !/^(\d+[.)]|[-*•])\s/.test(l);
+  }
+  function markHeadings(text){
+    if (MARKED.test(text)) return text;
+    const lines = text.split("\n");
+    // Text with paragraphs on single lines and no blank lines between them.
+    const dense = lines.filter(l => !l.trim()).length < lines.length * 0.1;
+    let afterChapter = false;
+    return lines.map((raw, i) => {
+      const l = raw.trim();
+      if (!l) return raw;
+      const alone = dense || ((i === 0 || !lines[i-1].trim()) && (i === lines.length - 1 || !lines[i+1].trim()));
+      let mark = "";
+      if (l.length <= 100 && (CHAPTER.test(l) || MATTER.test(l))) mark = "# ";
+      else if (alone && headingLike(l)) mark = afterChapter ? "# " : "## ";   // the title under "Chapter 3"
+      afterChapter = mark === "# " && CHAPTER.test(l);
+      return mark ? mark + l : raw;
+    }).join("\n");
+  }
+  function headingCount(text){
+    const h1 = (text.match(/^# /gm) || []).length, h2 = (text.match(/^## /gm) || []).length;
+    if (!h1 && !h2) return "No headings found.";
+    return `${h1} chapter ${h1 === 1 ? "heading" : "headings"}, ${h2} ${h2 === 1 ? "subheading" : "subheadings"}.`;
+  }
+
   async function takeFile(file){
     if (!file) return;
     uploadError("");
     $("#dropTitle").textContent = "Reading " + file.name + "…";
     $("#dropSub").textContent = "";
     try{
-      const text = (await readFile(file)).replace(/\r\n?/g, "\n");
+      const text = markHeadings((await readFile(file)).replace(/\r\n?/g, "\n"));
       if (!text.trim()) throw new Error("empty");
       setManuscript(text, file.name);
+      $("#dropSub").textContent = words(text).toLocaleString() + " words. " + headingCount(text) +
+        " Click to choose a different file.";
     }catch(e){
       S.text = ""; $("#reviewBtn").disabled = true;
       $("#dropTitle").textContent = "Drop your manuscript here";
@@ -733,7 +818,8 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
     parts.hidden = total < 2;
     const t0 = Date.now();
     clearInterval(timer);
-    const tick = () => { const s = Math.round((Date.now()-t0)/1000); $("#workSub").textContent = s < 5 ? "Claude is reading. This usually takes a minute or two per part." : s + " seconds so far."; };
+    const hint = S.workHint || "This usually takes a minute or two per part.";
+    const tick = () => { const s = Math.round((Date.now()-t0)/1000); $("#workSub").textContent = s < 5 ? hint : s + " seconds so far."; };
     tick(); timer = setInterval(tick, 1000);
     show("work");
   }
@@ -765,6 +851,11 @@ details.full textarea{width:100%;min-height:380px;margin-top:12px;padding:20px;
     const m = S.meta;
     return (m.title ? `Title: ${m.title}\n` : "") + `Book type: ${m.type}\nPublished on Amazon KDP and IngramSpark.`;
   }
+  /* Tells a model what the heading markers are, so it keeps them and doesn't report them as stray symbols. */
+  const HEADING_NOTE = `Formatting markers: a line starting with "# " is a chapter title, "## " is a subheading,
+"### " a smaller heading, and "- " a bullet point. They become Word heading styles when the book is
+exported. They are not typos, and they are not part of the text you are judging.`;
+
   function reviewPrompt(i){
     const n = S.chunks.length;
     const again = S.round > 1;
@@ -793,6 +884,8 @@ fill the list — if this part is genuinely clean, return fewer issues or none. 
 of the same problem into one issue. Prefer the big structural and factual problems over small stylistic
 preferences; a reader noticing an error matters more than a comma you would have placed differently.
 
+${HEADING_NOTE}
+
 Reply with only JSON in this shape:
 {"issues":[{"title":"short name of the problem","category":"one of: ${CATS.join(", ")}","severity":"high|medium|low","location":"where it occurs, e.g. chapter or section name","excerpt":"a short passage copied exactly from the manuscript that shows the problem, under 200 characters, or empty string if the problem is an absence","problem":"one or two sentences on what is wrong and why it matters to readers or sales","suggestion":"one or two sentences on how to fix it"}]}
 
@@ -801,13 +894,105 @@ Manuscript${n > 1 ? " part " + (i+1) : ""}:
 ${S.chunks[i]}
 >>>`;
   }
+
+  /* ---------- the final line edit ----------
+     The client's brief, word for word through check 11. Only the output format
+     is changed: the reviewer answers in JSON, so each finding lands in the
+     Fix / Leave list and the writer can apply it, and the report in the
+     client's A–E layout is rebuilt from the same JSON (lineEditReport). It
+     reads the whole book in one call, because the patterns it hunts for
+     (duplicate stories, repeated openers) only show up across chapters. */
+  const SECTIONS = { A:"Must-fix", B:"Duplicate stories/content", C:"Repetition", D:"Tone breaks from earlier edits", E:"Minor/optional" };
+  const SECTION_SEV = { A:"high", B:"medium", C:"medium", D:"medium", E:"low" };
+  const LINE_EDIT_BRIEF = `You are a line editor reviewing a nonfiction manuscript before it goes to print on Amazon KDP. The book was drafted with AI and has already been fact-checked. Your job is WRITING QUALITY, not fact-checking. Read the ENTIRE manuscript before you report anything. Patterns only show up across the whole book.
+
+Be practical, not extreme. One em dash, one "sweet spot," or one dramatic closing line is fine. Flag something only if (a) it's an actual error, or (b) it repeats often enough that a reader or reviewer would notice. If a category has no real problems, write "Nothing significant" and move on. Don't invent issues to fill a section.
+
+CHECK FOR THE FOLLOWING:
+
+1. DUPLICATE STORIES / CONTENT (usually the biggest AI tell)
+   AI drafts each section separately, so the same anecdote, explanation, or how-to often gets told 2–4 times in different sections or chapters. List every story, fact, explanation, or set of instructions that is told in full more than once. For each one, say where it appears and recommend which telling to keep. Mentioning something briefly a second time is fine. Re-explaining it from scratch is not.
+
+2. REPEATED SENTENCE / SECTION OPENERS
+   Count how sections and paragraphs begin. Flag any opener pattern used more than ~5 times (e.g., "Most people...", "Every [X] has that one...", "Imagine...", "Picture...", or a cinematic scene-setter like "A quiet parking lot on a Sunday morning..."). Give the count and a few examples.
+
+3. REPEATED PHRASES AND STOCK EXPRESSIONS
+   Find phrases that recur across the book, such as "changed everything," "opened the door," "word spread fast," "sweet spot," "nobody had ever seen anything like it," "game-changer," "the real magic," "here's the thing," "and that's the point." Give approximate counts. Flag anything used more than ~3 times.
+
+4. RECYCLED METAPHORS AND IMAGERY
+   Flag the same metaphor used in multiple places (e.g., something described as "a conversation" with something else, a "volume knob," a "cliff," "like a puzzle piece"). Say where each one appears.
+
+5. OVERUSED SINGLE WORDS
+   Flag distinctive words that appear far more often than natural writing would use them (e.g., wild, epic, amazing, incredible, legendary, massive, fascinating, unique, crucial, truly, simply). Ignore topic words that are naturally frequent, like the book's subject matter.
+
+6. CLASSIC AI VOCABULARY AND STRUCTURES
+   Only flag these if they actually appear: delve, tapestry, testament, journey, embark, realm, vibrant, nestled, boundless, symphony, beacon, unlock, elevate, navigate (figurative), "It's not just X, it's Y," "not only... but also," "Whether you're X or Y," "In a world where," lists that always come in threes, a moral or inspirational one-liner closing every section, and heavy em-dash use.
+
+7. SECTION-ENDING FORMULA
+   Check whether most sections end the same way (an inspirational wrap-up, "And that's why...", "Next time you...", a punchy one-liner). Flag it if more than about a third of sections share the pattern.
+
+8. CLEAR ERRORS
+   - Sentences that contradict themselves or contradict another part of the book
+   - Garbled, confusing, or illogical sentences
+   - Wrong terminology for the subject (things an enthusiast reader would catch)
+   - Tense shifts or switches between "you" and "they"/"skaters"/"readers" mid-paragraph
+   - Redundant back-to-back sentences that say the same thing
+   - The same fact stated twice in one paragraph
+
+9. TONE BREAKS FROM EARLIER EDITING PASSES
+   Look for sentences that sound like an inserted correction or a legal/compliance note and clash with the book's voice and audience: hedges like "sources vary," "is reported to," "widely credited," "according to accounts"; technical or clinical wording in a casual book; safety disclaimers written for adults in a kids' book; parenthetical asides; birth dates or other details that feel stapled on. Quote each one and suggest a rewrite in the book's voice that keeps the meaning.
+
+10. MANUSCRIPT HYGIENE
+   - Stray fragments, placeholder text ("covered in a later chapter" when it isn't), leftover notes or brackets
+   - Missing, malformed, or full-sentence headings; headings that don't match their sections
+   - Sections placed in the wrong chapter
+   - Inconsistent spelling conventions (US vs. UK: practise/practice, colour/color)
+   - Inconsistent numbers, measurements, or names across the book
+   - A missing introduction or conclusion, or an abrupt ending
+
+11. SUSPICIOUS FILLER CLAIMS
+   Don't fact-check, but do flag vivid specific details that look invented to add color (an exact injury, a quote, "he spent hours in his garage") when they seem unsupported. Mark these as "verify or soften."`;
+
+  function lineEditPrompt(){
+    return `${LINE_EDIT_BRIEF}
+
+OUTPUT FORMAT:
+Reply with only JSON in the shape below. The report is built from it, so everything the report needs goes in it.
+{"verdict":"2–3 sentences: overall how clean is it, and what's the single biggest issue",
+ "effort":"light polish | moderate cleanup | heavy rewrite",
+ "issues":[{"section":"A|B|C|D|E","check":"the number and name of the check above it falls under, e.g. 3. Repeated phrases","title":"short name of the problem","location":"chapter + section heading; for duplicates and repetition, every place it appears","excerpt":"the exact text, short, copied character for character from the manuscript","problem":"what is wrong; for repetition, the count and a few examples","suggestion":"a concrete fix or rewrite","severity":"high|medium|low"}]}
+Sections:
+  A. Must-fix (actual errors, broken text, contradictions)
+  B. Duplicate stories/content
+  C. Repetition (openers, phrases, metaphors, words), with counts
+  D. Tone breaks from earlier edits
+  E. Minor/optional
+- For every item, quote the exact text (short), say where it is (chapter + section heading), and give a concrete fix or rewrite.
+- For a duplicate, the suggestion says which telling to keep and which to cut.
+- A section with nothing significant gets no items.
+- Keep it scannable. Don't summarize the book or praise what's fine.
+
+Do NOT rewrite the whole manuscript. Report only.
+
+${bookLine()}
+${S.meta.ask ? `The publisher also asked: "${S.meta.ask}"\n` : ""}${settledBlock(S.text)}
+${HEADING_NOTE}
+
+Manuscript:
+<<<
+${S.text}
+>>>`;
+  }
+
   function normIssue(it, part, j){
     const sev = String(it.severity || "").toLowerCase();
+    const section = SECTIONS[String(it.section || "").trim().toUpperCase()[0]] ? String(it.section).trim().toUpperCase()[0] : "";
     return {
-      id: `p${part}-${j}`, part,
+      id: `p${part}-${j}`, part, section,
       title: String(it.title || "Untitled issue").slice(0, 160),
-      category: String(it.category || ""),
-      severity: SEV[sev] != null ? sev : "medium",
+      category: section ? `${section}. ${SECTIONS[section]}` : String(it.category || ""),
+      check: String(it.check || ""),
+      severity: SEV[sev] != null ? sev : SECTION_SEV[section] || "medium",
       location: String(it.location || ""),
       excerpt: String(it.excerpt || "").slice(0, 400),
       problem: String(it.problem || ""),
@@ -816,21 +1001,33 @@ ${S.chunks[i]}
     };
   }
 
-  async function runReview(){
+  async function runReview(pass){
     uploadError("");
+    S.pass = pass;
     S.meta = { title: $("#title").value.trim(), type: $("#type").value, ask: $("#ask").value.trim() };
+    S.text = markHeadings(S.text);   // pasted text has not been through this yet
     S.chunks = splitChunks(S.text);
-    S.issues = []; S.edits = []; S.approved = []; S.partial = 0;
+    S.issues = []; S.edits = []; S.approved = []; S.partial = 0; S.lineEdit = null;
     const ctl = new AbortController(); S.ctl = ctl;
-    const n = S.chunks.length;
     const who = CFG.reviewer;
-    startWork("upload", n > 1 ? `${who} is reading part 1 of ${n}` : `${who} is reading the manuscript`, n);
+    // The line edit reads the whole book in one call; the full review goes part by part.
+    const n = pass === "lineedit" ? 1 : S.chunks.length;
+    S.workHint = pass === "lineedit"
+      ? "The line editor reads the whole book in one go. This can take several minutes." : "";
+    const reading = (i) => pass === "lineedit" ? `${who} is line-editing the whole book`
+      : n > 1 ? `${who} is reading part ${i+1} of ${n}` : `${who} is reading the manuscript`;
+    startWork("upload", reading(0), n);
     try{
       for (let i = 0; i < n; i++){
-        setPart(i, n > 1 ? `${who} is reading part ${i+1} of ${n}` : `${who} is reading the manuscript`);
-        const res = await callModel("review", reviewPrompt(i), ctl.signal);
+        setPart(i, reading(i));
+        const res = pass === "lineedit"
+          ? await callModel("lineedit", lineEditPrompt(), ctl.signal)
+          : await callModel("review", reviewPrompt(i), ctl.signal);
         const list = Array.isArray(res && res.issues) ? res.issues : Array.isArray(res) ? res : [];
-        list.forEach((it, j) => S.issues.push(normIssue(it, i, j)));
+        // A line-edit finding belongs to the whole book, not to one part.
+        list.forEach((it, j) => S.issues.push(normIssue(it, pass === "lineedit" ? -1 : i, j)));
+        if (pass === "lineedit") S.lineEdit = {
+          verdict: String((res && res.verdict) || ""), effort: String((res && res.effort) || "") };
       }
     }catch(e){
       stopWork();
@@ -846,13 +1043,22 @@ ${S.chunks[i]}
     stopWork();
     finishIssues();
   }
+  const SECTION_ORDER = (iss) => iss.section ? "ABCDE".indexOf(iss.section) : 0;
   function finishIssues(){
     markRepeats();
-    // Anything already settled sinks to the bottom, so new problems come first.
-    S.issues.sort((a,b) => (!!a.repeat - !!b.repeat) || SEV[a.severity] - SEV[b.severity]);
+    // Settled repeats sink to the bottom. The line edit keeps the client's A–E order.
+    S.issues.sort((a,b) => (!!a.repeat - !!b.repeat) || SECTION_ORDER(a) - SECTION_ORDER(b) ||
+      SEV[a.severity] - SEV[b.severity]);
     renderIssues(); show("issues");
   }
-  $("#reviewBtn").addEventListener("click", runReview);
+  $("#reviewBtn").addEventListener("click", () => runReview($("#pass").value));
+  $("#pass").addEventListener("change", () => {
+    const line = $("#pass").value === "lineedit";
+    $("#fullChecks").hidden = line;
+    $("#passNote").textContent = line
+      ? "Writing quality only, for a book that has already been fact-checked. Reads the whole book at once."
+      : "Run this first. Send the book back as many times as it needs.";
+  });
 
   /* ---------- round history ----------
      Each round is one pass: reviewer finds problems, you choose, writer fixes. */
@@ -861,22 +1067,28 @@ ${S.chunks[i]}
     if (S.round < 2 && !S.history.length){ bar.hidden = true; return; }
     bar.hidden = false;
     bar.replaceChildren(el("span", { class:"lbl", text: "Rounds" }));
+    const kind = (p) => p === "lineedit" ? "line edit · " : "";
     S.history.forEach(h => bar.append(el("span", { class:"pill",
-      text: `${h.round}. ${h.found} found · ${h.fixed} fixed` })));
-    bar.append(el("span", { class:"pill now", text: `${S.round}. this round` }));
+      text: `${h.round}. ${kind(h.pass)}${h.found} found · ${h.fixed} fixed` })));
+    bar.append(el("span", { class:"pill now", text: `${S.round}. ${kind(S.pass)}this round` }));
   }
 
   /* ---------- memory across rounds ----------
      Each round the reviewer reads the text cold. Without this it re-raises what
      you already settled and picks at the writer's own fixes, so the same
      passages change round after round and the loop never ends. The ledger
-     remembers what was fixed (and how) and what you chose to leave. */
+     remembers what was fixed (and how) and what you chose to leave.
+
+     Each pass keeps its own memory. The line edit is meant to smooth the
+     corrections the full review inserted, so the full review's "leave
+     rewritten passages alone" must not block it. */
+  const samePass = (l) => l.pass === S.pass;
   function recordRound(){
     for (const iss of S.issues){
       if (iss.repeat && iss.decision === "skip") continue;   // already in the ledger
       const mine = S.edits.filter(e => e.issueId === iss.id);
       const applied = mine.filter(e => e.status === "applied");
-      const base = { round: S.round, title: iss.title, excerpt: iss.excerpt };
+      const base = { round: S.round, pass: S.pass, title: iss.title, excerpt: iss.excerpt };
       if (iss.decision === "fix" && applied.length){
         S.ledger.push({ ...base, decision: "fix", changes: applied.map(e => ({
           before: e.op === "insert_after" ? "" : e.find,
@@ -905,7 +1117,7 @@ ${S.chunks[i]}
   const rewritten = (l) => l.changes.map(c => c.after.trim()).filter(t => t.length >= 12);
   // Only the settled items whose text is in this part, plus those with no text to find.
   function ledgerFor(chunk){
-    return S.ledger.filter(l => {
+    return S.ledger.filter(samePass).filter(l => {
       const texts = l.decision === "fix" ? rewritten(l) : [l.excerpt].filter(Boolean);
       return !texts.length || texts.some(t => locate(chunk, t.trim()));
     }).slice(-60);
@@ -933,11 +1145,12 @@ ${lines.join("\n")}
      them. A high-severity problem inside a rewritten passage could be a real
      error the fix introduced, so that one is flagged but left for you to judge. */
   function markRepeats(){
-    if (!S.ledger.length) return;
+    const led = S.ledger.filter(samePass);
+    if (!led.length) return;
     for (const iss of S.issues){
       if (!iss.excerpt || iss.repeat) continue;
-      const left = S.ledger.find(l => l.decision === "skip" && l.excerpt && overlaps(iss.excerpt, l.excerpt));
-      const fixed = left ? null : S.ledger.find(l => l.decision === "fix" && rewritten(l).some(t => overlaps(iss.excerpt, t)));
+      const left = led.find(l => l.decision === "skip" && l.excerpt && overlaps(iss.excerpt, l.excerpt));
+      const fixed = left ? null : led.find(l => l.decision === "fix" && rewritten(l).some(t => overlaps(iss.excerpt, t)));
       if (left){
         iss.repeat = `Raised before: you left this as is in round ${left.round}.`;
         iss.decision = "skip";
@@ -964,6 +1177,13 @@ ${lines.join("\n")}
       `Found by <b>${esc(S.usedModel || CFG.reviewer)}</b>. Nothing changes until you press Apply — ` +
       `then <b>${esc(CFG.writer)}</b> makes only the fixes you approved.`;
     renderRounds();
+    const le = S.pass === "lineedit" && S.lineEdit;
+    $("#verdictBox").hidden = !(le && (le.verdict || le.effort));
+    $("#dlLineReport").hidden = !le;
+    if (le){
+      $("#verdictText").textContent = le.verdict;
+      $("#effortText").replaceChildren(...(le.effort ? ["Work needed: ", el("b", { text: le.effort })] : []));
+    }
     $("#fixAll").hidden = $("#skipAll").hidden = n === 0;
     S.issues.forEach((iss, i) => list.append(issueCard(iss, i + 1)));
     updateTally();
@@ -980,7 +1200,7 @@ ${lines.join("\n")}
       iss.category ? el("span", { class:"dot", "aria-hidden":"true" }) : null,
       iss.category ? el("span", { text: iss.category }) : null,
       iss.location ? el("span", { class:"dot", "aria-hidden":"true" }) : null,
-      iss.location ? el("span", { text: (S.chunks.length > 1 ? `Part ${iss.part+1}, ` : "") + iss.location }) : null
+      iss.location ? el("span", { text: (S.chunks.length > 1 && iss.part >= 0 ? `Part ${iss.part+1}, ` : "") + iss.location }) : null
     );
     const body = el("div", { class:"body" }, meta, el("h3", { text: iss.title }));
     if (iss.excerpt) body.append(el("p", { class:"excerpt" }, el("q", { text: iss.excerpt })));
@@ -1025,7 +1245,7 @@ ${lines.join("\n")}
   $("#fixAll").addEventListener("click", () => S.issues.forEach(i => { if (!i.repeat){ i.decision = "fix"; i._sync && i._sync(); } }));
   $("#skipAll").addEventListener("click", () => S.issues.forEach(i => { i.decision = "skip"; i._sync && i._sync(); }));
   $("#newUpload").addEventListener("click", () => {
-    S.round = 1; S.history = []; S.ledger = []; S.usedModel = "";
+    S.round = 1; S.history = []; S.ledger = []; S.usedModel = ""; S.lineEdit = null;
     show("upload");
   });
 
@@ -1038,7 +1258,7 @@ Problem: ${iss.problem}
 Suggested fix: ${iss.suggestion}${iss.excerpt ? `\nExample passage: "${iss.excerpt}"` : ""}${iss.note.trim() ? `\nPublisher's direction (follow this over the suggested fix where they differ): ${iss.note.trim()}` : ""}`
     ).join("\n\n");
     // Passages earlier rounds already rewrote. Left unprotected, they get rewritten again every round.
-    const locked = S.ledger.filter(l => l.decision === "fix").flatMap(rewritten)
+    const locked = S.ledger.filter(l => samePass(l) && l.decision === "fix").flatMap(rewritten)
       .filter(t => locate(S.chunks[i], t)).slice(-40)
       .map(t => `- "${t.length > 300 ? t.slice(0, 300) + "…" : t}"`).join("\n");
     return `You are editing a manuscript for a self-published book to fix specific approved problems.
@@ -1064,6 +1284,10 @@ Rules:
 - Change only what the approved fixes require. Keep the author's voice and everything else as is.
 - Keep "find" and "text" as short as they can be while staying unique. Do not quote whole paragraphs
   when a sentence will do, and never restate text that is not changing.
+- ${HEADING_NOTE.replace(/\n/g, " ")} Keep each marker at the start of its line. Never add or remove one
+  unless an approved fix is about that heading.${S.pass === "lineedit" ? `
+- Earlier passes corrected facts and safety wording in this book. When you rewrite a sentence for voice
+  or flow, keep every fact and every safety point it states. Change how it is said, not what it says.` : ""}
 - Prefer focused edits over rewriting long passages. At most 20 edits in this reply. If more are
   needed, make the 20 most important ones — the rest can be caught on the next round.
 - If a fix does not apply to this part, make no edits for it. If nothing applies, reply {"edits":[]}.
@@ -1165,6 +1389,10 @@ ${S.chunks[i]}
   }
 
   function renderResult(){
+    // The main button repeats this pass; the other one switches to the other pass.
+    const line = S.pass === "lineedit";
+    $("#reReview").textContent = line ? "Run the line edit again" : "Send back for another review";
+    $("#lineEdit").textContent = line ? "Send back for a full review" : "Run the final line edit";
     const wrap = $("#changeList"); wrap.replaceChildren();
     for (const iss of S.approved){
       const mine = S.edits.filter(e => e.issueId === iss.id);
@@ -1210,53 +1438,101 @@ ${S.chunks[i]}
     const b = (S.meta.title || S.source || "manuscript").replace(/\.[^.]+$/, "").replace(/[^\w\- ]+/g, "").trim();
     return b || "manuscript";
   }
-  function downloadFile(filename, data){
-    const url = URL.createObjectURL(new Blob([data], { type: "text/plain;charset=utf-8" }));
+  function downloadFile(filename, data, type){
+    const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: type || "text/plain;charset=utf-8" }));
     const a = el("a", { href: url, download: filename });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
-  $("#dlText").addEventListener("click", () => downloadFile(baseName() + " - revised.txt", S.revised));
-  $("#dlReport").addEventListener("click", () => {
-    const lines = [`# Change report: ${S.meta.title || S.source}`, ""];
-    lines.push(`Round: ${S.round}`);
-    lines.push(`Reviewed by: ${S.usedModel || CFG.reviewer} (editing, proofreading, fact-checking)`);
-    lines.push(`Fixes written by: ${CFG.writer}`);
-    if (S.meta.ask) lines.push(`Publisher also asked: ${S.meta.ask}`);
-    lines.push("");
-    lines.push("## Left as is", "");
-    const skipped = S.issues.filter(i => i.decision !== "fix");
-    lines.push(...(skipped.length ? skipped.map(i => `- ${i.title} (${i.severity})`) : ["- None"]), "");
-    lines.push("## Fixed", "");
-    for (const iss of S.approved){
-      lines.push(`### ${iss.title}`, "", iss.problem, "");
-      if (iss.note.trim()) lines.push(`Direction: ${iss.note.trim()}`, "");
-      const mine = S.edits.filter(e => e.issueId === iss.id && e.status === "applied");
-      if (!mine.length) lines.push("No text changes.", "");
-      for (const e of mine){
-        if (e.op === "insert_after") lines.push(`- Added after “${e.find.slice(-80)}”: “${e.text.trim()}”`);
-        else if (e.op === "delete") lines.push(`- Removed: “${e.find}”`);
-        else lines.push(`- “${e.find}” → “${e.text}”`);
-      }
-      lines.push("");
+  /* The server builds the Word file: "# " lines become Heading 1, "## " Heading 2,
+     "- " lines bullets. Reports go through the same converter. */
+  async function downloadDocx(filename, text, retried){
+    let res;
+    try{
+      res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-app-password": sessionStorage.getItem("mr-pw") || "" },
+        body: JSON.stringify({ text, title: S.meta.title || "" })
+      });
+    }catch{ return toast(errCopy({ code: "network" })); }
+    if (res.status === 401 && !retried){
+      const pw = window.prompt("Enter the dashboard password");
+      if (pw == null) return;
+      sessionStorage.setItem("mr-pw", pw);
+      return downloadDocx(filename, text, true);
     }
-    downloadFile(baseName() + " - change report.md", lines.join("\n"));
+    if (!res.ok) return toast("The Word file couldn’t be built. Try again.");
+    downloadFile(filename, await res.blob());
+  }
+  // Report lines are one paragraph each. Collapsing a quote's line breaks keeps
+  // a quoted "## heading" from turning into a real heading in the report.
+  const one = (s) => String(s || "").replace(/\s+/g, " ").trim();
+
+  $("#dlText").addEventListener("click", () => downloadDocx(baseName() + " - revised.docx", S.revised));
+  $("#dlReport").addEventListener("click", () => {
+    const lines = [`# Change report: ${one(S.meta.title || S.source.replace(/\.[^.]+$/, ""))}`];
+    lines.push(`Round: ${S.round}`);
+    lines.push(`Reviewed by: ${S.usedModel || CFG.reviewer} (${S.pass === "lineedit"
+      ? "final line edit" : "editing, proofreading, fact-checking"})`);
+    lines.push(`Fixes written by: ${CFG.writer}`);
+    if (S.meta.ask) lines.push(`Publisher also asked: ${one(S.meta.ask)}`);
+    lines.push("## Left as is");
+    const skipped = S.issues.filter(i => i.decision !== "fix");
+    lines.push(...(skipped.length ? skipped.map(i => `- ${one(i.title)} (${i.severity})`) : ["None."]));
+    lines.push("## Fixed");
+    for (const iss of S.approved){
+      lines.push(`### ${one(iss.title)}`, one(iss.problem));
+      if (iss.note.trim()) lines.push(`Direction: ${one(iss.note)}`);
+      const mine = S.edits.filter(e => e.issueId === iss.id && e.status === "applied");
+      if (!mine.length) lines.push("No text changes.");
+      for (const e of mine){
+        if (e.op === "insert_after") lines.push(`- Added after “${one(e.find).slice(-80)}”: “${one(e.text)}”`);
+        else if (e.op === "delete") lines.push(`- Removed: “${one(e.find)}”`);
+        else lines.push(`- “${one(e.find)}” → “${one(e.text)}”`);
+      }
+    }
+    downloadDocx(baseName() + " - change report.docx", lines.join("\n"));
+  });
+
+  /* The line editor's findings in the client's layout: verdict, sections A–E
+     (empty ones say "Nothing significant"), then the work estimate. */
+  $("#dlLineReport").addEventListener("click", () => {
+    const le = S.lineEdit || {};
+    const lines = [`# Line edit: ${one(S.meta.title || S.source.replace(/\.[^.]+$/, ""))}`];
+    if (le.verdict) lines.push(one(le.verdict));
+    for (const [k, name] of Object.entries(SECTIONS)){
+      lines.push(`## ${k}. ${name}`);
+      const items = S.issues.filter(i => i.section === k);
+      if (!items.length) lines.push("Nothing significant.");
+      for (const i of items){
+        lines.push(`### ${one(i.title)}`);
+        if (i.location) lines.push(`Where: ${one(i.location)}`);
+        if (i.excerpt) lines.push(`Text: “${one(i.excerpt)}”`);
+        if (i.problem) lines.push(`Problem: ${one(i.problem)}`);
+        if (i.suggestion) lines.push(`Fix: ${one(i.suggestion)}`);
+      }
+    }
+    if (le.effort) lines.push(`Work needed: ${one(le.effort)}`);
+    downloadDocx(baseName() + " - line edit report.docx", lines.join("\n"));
   });
   $("#backIssues").addEventListener("click", () => { renderIssues(); show("issues"); });
 
   /* The loop, driven by you and not by a timer: the revised text goes back to
-     the reviewing model, which reads it fresh and says what is still wrong. */
-  $("#reReview").addEventListener("click", () => {
+     the reviewing model, which reads it fresh and says what is still wrong.
+     The final line edit is the same loop with the client's brief. */
+  function nextRound(pass){
     S.history.push({
-      round: S.round,
+      round: S.round, pass: S.pass,
       found: S.issues.length,
       fixed: S.edits.filter(e => e.status === "applied").length
     });
     recordRound();
     S.round += 1;
     setManuscript(S.revised, S.source.replace(/ \(round \d+\)$/, "") + ` (round ${S.round})`);
-    runReview();
-  });
+    runReview(pass);
+  }
+  $("#reReview").addEventListener("click", () => nextRound(S.pass));
+  $("#lineEdit").addEventListener("click", () => nextRound(S.pass === "lineedit" ? "full" : "lineedit"));
 
   loadConfig();
 
